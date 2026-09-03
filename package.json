@@ -1,0 +1,54 @@
+{
+  "name": "stikly",
+  "version": "1.0.5",
+  "description": "Sticky notes for the Windows 10/11 desktop",
+  "main": "main.js",
+  "author": "Wilkcraft",
+  "scripts": {
+    "start": "electron .",
+    "dist": "electron-builder",
+    "clean": "rimraf dist"
+  },
+  "devDependencies": {
+    "electron": "^31.0.0",
+    "electron-builder": "^24.13.3",
+    "rimraf": "^5.0.0"
+  },
+  "build": {
+    "appId": "com.wilkcraft.stikly",
+    "productName": "Stikly",
+    "compression": "normal",
+    "asar": true,
+    "asarUnpack": [
+      "windows-window.ps1",
+      "windows-window.cs"
+    ],
+    "win": {
+      "icon": "build/icon.ico",
+      "target": [
+        "nsis",
+        "portable"
+      ]
+    },
+    "nsis": {
+      "oneClick": false,
+      "perMachine": true,
+      "allowToChangeInstallationDirectory": true,
+      "createDesktopShortcut": true,
+      "createStartMenuShortcut": true,
+      "menuCategory": true
+    },
+    "files": [
+      "main.js",
+      "preload.js",
+      "src/**/*",
+      "build/**/*",
+      "windows-window.ps1",
+      "windows-window.cs",
+      "!node_modules/**/*"
+    ]
+  },
+  "allowScripts": {
+    "electron@31.7.7": true
+  }
+}

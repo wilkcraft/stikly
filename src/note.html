@@ -1,0 +1,154 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <title>Sticky Note</title>
+    <link rel="stylesheet" href="note.css" />
+  </head>
+
+  <body>
+    <div class="note" id="note">
+      <div class="titlebar" id="titlebar">
+        <div class="left-actions">
+          <button id="menuBtn" class="icon-btn" title="Options">
+            ⋮
+          </button>
+
+          <div id="menu" class="menu">
+            <div class="menu-section">
+              <div class="menu-title">Color</div>
+
+              <div class="color-options">
+                <button
+                  class="color-option yellow"
+                  data-color="#fff59d"
+                  title="Yellow"
+                ></button>
+                <button
+                  class="color-option green"
+                  data-color="#c8e6c9"
+                  title="Green"
+                ></button>
+                <button
+                  class="color-option pink"
+                  data-color="#f8bbd0"
+                  title="Pink"
+                ></button>
+                <button
+                  class="color-option blue"
+                  data-color="#bbdefb"
+                  title="Blue"
+                ></button>
+                <button
+                  id="customColorBtn"
+                  class="color-option gear-btn"
+                  title="Custom color"
+                >
+                  <svg
+                    viewBox="0 0 3000 3000"
+                    width="20"
+                    height="20"
+                    fill="currentColor"
+                  >
+                    <path
+                      d="M 1332.121094 419.199219 C 1310.171875 419.199219 1295.558594 437.078125 1292.488281 458.820312 L 1255.980469 717.871094 C 1208.878906 732.558594 1163.199219 751.480469 1119.5 774.398438 L 910.496094 617.050781 C 901.730469 610.449219 891.601562 606.570312 881.726562 606.28125 C 871.851562 605.988281 862.230469 609.289062 854.472656 617.050781 L 780.6875 690.828125 L 690.828125 780.691406 L 617.046875 854.46875 C 601.527344 869.988281 603.847656 892.960938 617.046875 910.5 L 774.398438 1119.5 C 751.484375 1163.199219 732.566406 1208.871094 717.871094 1255.96875 L 458.816406 1292.488281 C 437.085938 1295.558594 419.199219 1310.171875 419.199219 1332.121094 L 419.199219 1667.878906 C 419.199219 1689.828125 437.085938 1704.441406 458.816406 1707.5 L 717.871094 1744.03125 C 732.566406 1791.128906 751.484375 1836.800781 774.398438 1880.488281 L 617.046875 2089.496094 C 603.847656 2107.03125 601.527344 2130.007812 617.046875 2145.527344 L 690.828125 2219.3125 L 780.6875 2309.171875 L 854.472656 2382.953125 C 869.992188 2398.472656 892.964844 2396.152344 910.496094 2382.953125 L 1119.5 2225.601562 C 1163.199219 2248.515625 1208.871094 2267.433594 1255.96875 2282.128906 L 1292.488281 2541.183594 C 1295.558594 2562.914062 1310.171875 2580.800781 1332.121094 2580.800781 L 1667.878906 2580.800781 C 1689.828125 2580.800781 1704.441406 2562.914062 1707.5 2541.183594 L 1744.03125 2282.128906 C 1791.128906 2267.433594 1836.800781 2248.515625 1880.488281 2225.601562 L 2089.5 2382.953125 C 2107.03125 2396.152344 2130.011719 2398.472656 2145.53125 2382.953125 L 2219.308594 2309.171875 L 2309.171875 2219.3125 L 2382.949219 2145.527344 C 2398.46875 2130.007812 2396.148438 2107.03125 2382.949219 2089.496094 L 2225.601562 1880.5 C 2248.511719 1836.800781 2267.429688 1791.128906 2282.128906 1744.03125 L 2541.179688 1707.5 C 2562.921875 1704.441406 2580.800781 1689.828125 2580.800781 1667.878906 L 2580.800781 1332.121094 C 2580.800781 1310.171875 2562.921875 1295.558594 2541.179688 1292.488281 L 2282.128906 1255.96875 C 2267.429688 1208.871094 2248.511719 1163.191406 2225.601562 1119.488281 L 2382.949219 910.5 C 2396.148438 892.960938 2398.46875 869.988281 2382.949219 854.46875 L 2145.53125 617.050781 C 2137.769531 609.289062 2128.140625 605.988281 2118.269531 606.28125 C 2108.390625 606.570312 2098.261719 610.449219 2089.5 617.050781 L 1880.488281 774.398438 C 1836.800781 751.488281 1791.128906 732.570312 1744.03125 717.871094 L 1707.5 458.820312 C 1704.441406 437.078125 1689.828125 419.199219 1667.878906 419.199219 Z M 1498.878906 968.320312 C 1499.25 968.320312 1499.628906 968.320312 1500 968.320312 C 1793.640625 968.320312 2031.679688 1206.359375 2031.679688 1500 C 2031.679688 1793.640625 1793.640625 2031.683594 1500 2031.683594 C 1206.359375 2031.683594 968.316406 1793.640625 968.316406 1500 C 968.316406 1206.800781 1205.671875 968.941406 1498.871094 968.320312"
+                    ></path>
+                  </svg>
+                </button>
+                <input
+                  type="color"
+                  id="noteColorPicker"
+                  value="#fff59d"
+                  style="display: none"
+                />
+              </div>
+            </div>
+
+            <div class="menu-separator"></div>
+
+            <div class="menu-section">
+              <div class="menu-title">Position</div>
+
+              <button class="menu-item" data-zorder="desktop">
+                <span>▱</span>
+                On desktop
+              </button>
+
+              <button class="menu-item" data-zorder="normal">
+                <span>□</span>
+                Normal
+              </button>
+
+              <button class="menu-item" data-zorder="top">
+                <span>↑</span>
+                Always on top
+              </button>
+            </div>
+          </div>
+        </div>
+
+        <div class="actions">
+          <button id="newBtn" title="New note">+</button>
+          <button id="closeBtn" title="Close">×</button>
+        </div>
+      </div>
+
+      <div
+        id="content"
+        class="content"
+        contenteditable="true"
+        spellcheck="false"
+        data-placeholder="Write something..."
+      ></div>
+
+      <div class="toolbar">
+        <button data-command="bold" title="Bold">
+          <b>B</b>
+        </button>
+
+        <button data-command="italic" title="Italic">
+          <i>I</i>
+        </button>
+
+        <button data-command="underline" title="Underline">
+          <u>U</u>
+        </button>
+
+        <button data-command="strikeThrough" title="Strikethrough">
+          <s>S</s>
+        </button>
+
+        <span class="toolbar-separator"></span>
+        <button id="colorBtn" title="Text color">A</button>
+        <input
+          type="color"
+          id="colorPicker"
+          value="#000000"
+          style="display: none"
+        />
+
+        <button data-command="insertUnorderedList" title="Bulleted list">
+          <span class="list-icon">•</span><span class="list-lines">☰</span>
+        </button>
+
+        <button data-command="insertOrderedList" title="Numbered list">
+          <span class="number-icon">1.</span><span class="list-lines">☰</span>
+        </button>
+      </div>
+      <div id="colorMenu" class="menu color-menu">
+        <button id="resetColorBtn" class="menu-item">
+          <span>⟲</span>
+          Reset color
+        </button>
+      </div>
+      <div id="noteColorMenu" class="menu">
+        <button id="resetNoteColorBtn" class="menu-item">
+          <span>⟲</span>
+          Reset color
+        </button>
+      </div>
+    </div>
+
+    <script src="note.js"></script>
+  </body>
+</html>
