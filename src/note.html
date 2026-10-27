@@ -1,8 +1,8 @@
-<!DOCTYPE html>
+<!doctype html>
 <html lang="en">
   <head>
     <meta charset="UTF-8" />
-    <title>Sticky Note</title>
+    <title>Stikly Note</title>
     <link rel="stylesheet" href="note.css" />
   </head>
 
@@ -10,8 +10,24 @@
     <div class="note" id="note">
       <div class="titlebar" id="titlebar">
         <div class="left-actions">
-          <button id="menuBtn" class="icon-btn" title="Options">
-            ⋮
+          <button id="menuBtn" class="icon-btn" title="Options">⋮</button>
+          <button id="saveBtn" class="icon-btn" title="Save note">
+            <svg
+              viewBox="0 0 24 24"
+              width="14"
+              height="14"
+              fill="none"
+              stroke="currentColor"
+              stroke-width="2"
+              stroke-linecap="round"
+              stroke-linejoin="round"
+            >
+              <path
+                d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2Z"
+              />
+              <path d="M17 21v-8H7v8" />
+              <path d="M7 3v5h8" />
+            </svg>
           </button>
 
           <div id="menu" class="menu">
@@ -55,12 +71,6 @@
                     ></path>
                   </svg>
                 </button>
-                <input
-                  type="color"
-                  id="noteColorPicker"
-                  value="#fff59d"
-                  style="display: none"
-                />
               </div>
             </div>
 
@@ -88,7 +98,23 @@
         </div>
 
         <div class="actions">
-          <button id="newBtn" title="New note">+</button>
+          <div class="new-note-group">
+            <button id="newBtn" title="New note">+</button>
+            <button id="openBtn" title="Open existing note">
+              <svg
+                viewBox="0 0 24 24"
+                width="9"
+                height="9"
+                fill="none"
+                stroke="currentColor"
+                stroke-width="2"
+                stroke-linecap="round"
+                stroke-linejoin="round"
+              >
+                <path d="M6 9l6 6 6-6" />
+              </svg>
+            </button>
+          </div>
           <button id="closeBtn" title="Close">×</button>
         </div>
       </div>
@@ -120,12 +146,26 @@
 
         <span class="toolbar-separator"></span>
         <button id="colorBtn" title="Text color">A</button>
-        <input
-          type="color"
-          id="colorPicker"
-          value="#000000"
-          style="display: none"
-        />
+        <button
+          id="highlightBtn"
+          title="Highlight color (right-click to remove)"
+        >
+          <svg
+            viewBox="0 0 24 24"
+            width="15"
+            height="15"
+            fill="none"
+            stroke="currentColor"
+            stroke-width="2"
+            stroke-linecap="round"
+            stroke-linejoin="round"
+          >
+            <path d="m9 11-6 6v3h9l3-3" />
+            <path
+              d="m22 12-4.6 4.6a2 2 0 0 1-2.8 0l-5.2-5.2a2 2 0 0 1 0-2.8L14 4"
+            />
+          </svg>
+        </button>
 
         <button data-command="insertUnorderedList" title="Bulleted list">
           <span class="list-icon">•</span><span class="list-lines">☰</span>
@@ -134,11 +174,45 @@
         <button data-command="insertOrderedList" title="Numbered list">
           <span class="number-icon">1.</span><span class="list-lines">☰</span>
         </button>
+        <button id="checklistBtn" title="Checklist">
+          <svg
+            viewBox="0 0 24 24"
+            width="15"
+            height="15"
+            fill="none"
+            stroke="currentColor"
+            stroke-width="2"
+            stroke-linecap="round"
+            stroke-linejoin="round"
+          >
+            <rect x="3" y="3" width="18" height="18" rx="3" />
+            <path d="m8 12 3 3 5-6" />
+          </svg>
+        </button>
+        <button data-command="undo" title="Undo">↶</button>
+        <button data-command="redo" title="Redo">↷</button>
       </div>
+
+      <div id="searchBar" class="search-bar">
+        <input
+          type="text"
+          id="searchInput"
+          placeholder="Search..."
+          spellcheck="false"
+        />
+        <button id="searchCloseBtn" title="Close search">×</button>
+      </div>
+
       <div id="colorMenu" class="menu color-menu">
         <button id="resetColorBtn" class="menu-item">
           <span>⟲</span>
           Reset color
+        </button>
+      </div>
+      <div id="highlightMenu" class="menu color-menu">
+        <button id="resetHighlightBtn" class="menu-item">
+          <span>⟲</span>
+          Remove highlight
         </button>
       </div>
       <div id="noteColorMenu" class="menu">

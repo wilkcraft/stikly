@@ -1,0 +1,77 @@
+html,
+body {
+  margin: 0;
+  padding: 0;
+  overflow: hidden;
+  font-family: "Segoe UI", sans-serif;
+  background: transparent;
+}
+body {
+  -webkit-app-region: drag;
+  padding: 10px;
+  background: var(--picker-bg, rgba(255, 255, 255, 0.97));
+  border: 1px solid rgba(0, 0, 0, 0.12);
+  border-radius: 8px;
+  box-shadow: 0 5px 18px rgba(0, 0, 0, 0.3);
+  box-sizing: border-box;
+}
+#svCanvas,
+#hueCanvas,
+#pickerHex,
+.picker-close,
+.picker-bottom-row {
+  -webkit-app-region: no-drag;
+}
+#svCanvas,
+#hueCanvas {
+  display: block;
+  cursor: crosshair;
+  border-radius: 4px;
+  margin-bottom: 6px;
+}
+.picker-bottom-row {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin-top: 8px;
+  height: 30px;
+}
+.picker-preview {
+  width: 30px;
+  height: 30px;
+  border-radius: 4px;
+  border: 1px solid rgba(0, 0, 0, 0.2);
+  flex-shrink: 0;
+}
+#pickerHex {
+  flex: 1;
+  min-width: 0;
+  height: 100%;
+  box-sizing: border-box;
+  font-size: 12px;
+  padding: 3px 5px;
+  border: 1px solid rgba(0, 0, 0, 0.15);
+  border-radius: 4px;
+  text-transform: uppercase;
+}
+.picker-close {
+  position: absolute;
+  top: 4px;
+  right: 4px;
+  width: 18px;
+  height: 18px;
+  border: none;
+  background: transparent;
+  cursor: pointer;
+}
+body.dark-bg #pickerHex {
+  background: rgba(0, 0, 0, 0.25);
+  border-color: rgba(255, 255, 255, 0.25);
+  color: #fff;
+}
+body.dark-bg .picker-preview {
+  border-color: rgba(255, 255, 255, 0.3);
+}
+body.dark-bg .picker-close {
+  color: #fff;
+}

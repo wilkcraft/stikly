@@ -7,9 +7,18 @@ const menu = document.getElementById("menu");
 const colorOptions = document.querySelectorAll(".color-option");
 const zOrderOptions = document.querySelectorAll("[data-zorder]");
 const toolbarButtons = document.querySelectorAll("[data-command]");
-
+const toolbar = document.querySelector(".toolbar");
+const saveBtn = document.getElementById("saveBtn");
+const openBtn = document.getElementById("openBtn");
+const colorBtn = document.getElementById("colorBtn");
+const highlightBtn = document.getElementById("highlightBtn");
+const checklistBtn = document.getElementById("checklistBtn");
+const colorMenu = document.getElementById("colorMenu");
+const highlightMenu = document.getElementById("highlightMenu");
+const resetColorBtn = document.getElementById("resetColorBtn");
+const resetHighlightBtn = document.getElementById("resetHighlightBtn");
+let notePath = null;
 const DEFAULT_NOTE_COLOR = "#fff59d";
-
 let noteId = null;
 let saveTimeout = null;
 
@@ -43,8 +52,21 @@ function applyNoteColor(color) {
   }
 }
 
-window.notesAPI.onInit(({ id, html, text, color, zOrder }) => {
+function rgbStringToHex(rgbStr) {
+  const match = rgbStr.match(/\d+/g);
+  if (!match || match.length < 3) return "#000000";
+  const [r, g, b] = match.map(Number);
+  return (
+    "#" +
+    [r, g, b]
+      .map((x) => Math.max(0, Math.min(255, x)).toString(16).padStart(2, "0"))
+      .join("")
+  );
+}
+
+window.notesAPI.onInit(({ id, html, text, color, zOrder, filePath }) => {
   noteId = id;
+  notePath = filePath || null;
   if (html) {
     content.innerHTML = html;
   } else if (text) {
@@ -54,6 +76,8 @@ window.notesAPI.onInit(({ id, html, text, color, zOrder }) => {
   }
   applyNoteColor(color || DEFAULT_NOTE_COLOR);
   updateZOrderUI(zOrder || "normal");
+  saveBtn.classList.toggle("saved", !!notePath);
+  saveBtn.title = notePath ? "Save as..." : "Save note";
 });
 
 function saveContent() {
@@ -74,75 +98,78 @@ function scheduleSave() {
 
 content.addEventListener("input", scheduleSave);
 
-toolbarButtons.forEach((button) => {
-  button.addEventListener("mousedown", (event) => {
-    event.preventDefault();
-  });
-  button.addEventListener("click", () => {
-    const command = button.dataset.command;
-    content.focus();
-    document.execCommand(command, false, null);
-    updateToolbarState();
-    scheduleSave();
-  });
-});
-
-const colorBtn = document.getElementById("colorBtn");
-const colorPicker = document.getElementById("colorPicker");
 let savedRange = null;
 
-colorBtn.addEventListener("mousedown", (event) => {
-  event.preventDefault();
-  const selection = window.getSelection();
-  if (selection.rangeCount > 0) {
-    savedRange = selection.getRangeAt(0).cloneRange();
+document.addEventListener("selectionchange", () => {
+  const sel = window.getSelection();
+  if (
+    sel.rangeCount &&
+    content.contains(sel.anchorNode) &&
+    content.contains(sel.focusNode)
+  ) {
+    savedRange = sel.getRangeAt(0).cloneRange();
   }
 });
 
-colorBtn.addEventListener("click", () => {
-  colorPicker.click();
-});
-
-colorPicker.addEventListener("input", (event) => {
-  const color = event.target.value;
-  content.focus();
-  const selection = window.getSelection();
-  if (savedRange) {
-    selection.removeAllRanges();
-    selection.addRange(savedRange);
-  }
-  document.execCommand("foreColor", false, color);
-  colorBtn.style.borderBottom = `3px solid ${color}`;
-  scheduleSave();
-});
-
-const colorMenu = document.getElementById("colorMenu");
-const resetColorBtn = document.getElementById("resetColorBtn");
-
-colorBtn.addEventListener("contextmenu", (event) => {
-  event.preventDefault();
-  colorMenu.classList.add("visible");
-});
-
-resetColorBtn.addEventListener("click", () => {
-  content.focus();
-  const selection = window.getSelection();
-  if (savedRange) {
-    selection.removeAllRanges();
-    selection.addRange(savedRange);
+function showKeptSelection() {
+  if (!window.CSS || !CSS.highlights || typeof Highlight === "undefined")
+    return;
+  if (savedRange && !savedRange.collapsed && !document.hasFocus()) {
+    CSS.highlights.set(
+      "kept-selection",
+      new Highlight(savedRange.cloneRange()),
+    );
   } else {
-    const range = document.createRange();
-    range.selectNodeContents(content);
-    selection.removeAllRanges();
-    selection.addRange(range);
+    CSS.highlights.delete("kept-selection");
   }
-  document.execCommand("foreColor", false, "#000000");
-  colorBtn.style.borderBottom = "";
-  scheduleSave();
-  colorMenu.classList.remove("visible");
+}
+window.addEventListener("blur", showKeptSelection);
+window.addEventListener("focus", () => {
+  if (window.CSS && CSS.highlights) CSS.highlights.delete("kept-selection");
 });
+
+function selectAllContent() {
+  const range = document.createRange();
+  range.selectNodeContents(content);
+  savedRange = range;
+}
+
+function applyToSavedSelection(command, value) {
+  content.focus();
+  const sel = window.getSelection();
+  if (savedRange) {
+    sel.removeAllRanges();
+    sel.addRange(savedRange.cloneRange());
+  }
+  document.execCommand(command, false, value);
+  if (sel.rangeCount && content.contains(sel.anchorNode)) {
+    savedRange = sel.getRangeAt(0).cloneRange();
+  }
+  showKeptSelection();
+  scheduleSave();
+}
+
+function currentList() {
+  const sel = window.getSelection();
+  if (!sel.rangeCount || !sel.anchorNode || !content.contains(sel.anchorNode)) {
+    return null;
+  }
+  const node =
+    sel.anchorNode.nodeType === 1
+      ? sel.anchorNode
+      : sel.anchorNode.parentElement;
+  const list = node ? node.closest("ul, ol") : null;
+  return list && content.contains(list) ? list : null;
+}
+
+function isChecklist(list) {
+  return (
+    !!list && list.tagName === "UL" && list.classList.contains("checklist")
+  );
+}
 
 function updateToolbarState() {
+  const inChecklist = isChecklist(currentList());
   toolbarButtons.forEach((button) => {
     const command = button.dataset.command;
     let active = false;
@@ -151,12 +178,193 @@ function updateToolbarState() {
     } catch (e) {
       active = false;
     }
+    if (command === "insertUnorderedList" && inChecklist) active = false;
     button.classList.toggle("active", active);
   });
+  checklistBtn.classList.toggle("active", inChecklist);
 }
+
+function applyEditCommand(command) {
+  content.focus();
+  if (command === "insertUnorderedList" && isChecklist(currentList())) {
+    currentList().classList.remove("checklist");
+    updateToolbarState();
+    scheduleSave();
+    return;
+  }
+  document.execCommand(command, false, null);
+  updateToolbarState();
+  scheduleSave();
+}
+
+toolbarButtons.forEach((button) => {
+  button.addEventListener("mousedown", (event) => {
+    event.preventDefault();
+  });
+  button.addEventListener("click", () => {
+    applyEditCommand(button.dataset.command);
+  });
+});
 
 content.addEventListener("keyup", updateToolbarState);
 content.addEventListener("mouseup", updateToolbarState);
+
+toolbar.addEventListener(
+  "wheel",
+  (e) => {
+    if (e.deltaY) {
+      toolbar.scrollLeft += e.deltaY;
+      e.preventDefault();
+    }
+  },
+  { passive: false },
+);
+
+function markSelectedListsAsChecklist() {
+  const sel = window.getSelection();
+  content.querySelectorAll("ul").forEach((ul) => {
+    if (sel.rangeCount && sel.containsNode(ul, true)) {
+      ul.classList.add("checklist");
+    }
+  });
+  const list = currentList();
+  if (list && list.tagName === "UL") list.classList.add("checklist");
+}
+
+function toggleChecklist() {
+  content.focus();
+  const list = currentList();
+  if (isChecklist(list)) {
+    document.execCommand("insertUnorderedList");
+  } else if (list && list.tagName === "UL") {
+    list.classList.add("checklist");
+  } else {
+    document.execCommand("insertUnorderedList");
+    markSelectedListsAsChecklist();
+  }
+  updateToolbarState();
+  scheduleSave();
+}
+
+checklistBtn.addEventListener("mousedown", (e) => e.preventDefault());
+checklistBtn.addEventListener("click", toggleChecklist);
+
+content.addEventListener("mousedown", (e) => {
+  if (e.button !== 0 || !e.target.closest) return;
+  const li = e.target.closest("ul.checklist > li");
+  if (!li || !content.contains(li)) return;
+  const rect = li.getBoundingClientRect();
+  const x = e.clientX - rect.left;
+  const y = e.clientY - rect.top;
+  if (x >= 0 && x <= 24 && y >= 0 && y <= 24) {
+    e.preventDefault();
+    if (li.dataset.checked === "true") {
+      delete li.dataset.checked;
+    } else {
+      li.dataset.checked = "true";
+    }
+    scheduleSave();
+  }
+});
+
+content.addEventListener("input", (e) => {
+  if (e.inputType !== "insertParagraph") return;
+  const sel = window.getSelection();
+  if (!sel.anchorNode) return;
+  const node =
+    sel.anchorNode.nodeType === 1
+      ? sel.anchorNode
+      : sel.anchorNode.parentElement;
+  const li = node && node.closest("ul.checklist > li");
+  if (li && !li.textContent.trim()) delete li.dataset.checked;
+});
+
+colorBtn.addEventListener("mousedown", (event) => {
+  event.preventDefault();
+});
+
+colorBtn.addEventListener("click", () => {
+  let currentColor = "#000000";
+  try {
+    const val = document.queryCommandValue("foreColor");
+    if (val) currentColor = rgbStringToHex(val);
+  } catch (e) {}
+  hideColorMenus();
+  window.notesAPI.openColorPicker({
+    noteId,
+    origin: "text",
+    currentColor,
+    noteColor: noteEl.style.background,
+  });
+});
+
+colorBtn.addEventListener("contextmenu", (event) => {
+  event.preventDefault();
+  showMenuAboveButton(colorMenu, colorBtn);
+});
+
+function showMenuAboveButton(menuEl, btn) {
+  hideColorMenus();
+  menuEl.classList.add("visible");
+  const noteRect = noteEl.getBoundingClientRect();
+  const btnRect = btn.getBoundingClientRect();
+  const menuWidth = menuEl.offsetWidth;
+
+  let left = btnRect.left - noteRect.left + btnRect.width / 2 - menuWidth / 2;
+  left = Math.max(4, Math.min(left, noteRect.width - menuWidth - 4));
+
+  menuEl.style.left = left + "px";
+  menuEl.style.right = "auto";
+}
+
+resetColorBtn.addEventListener("click", () => {
+  if (!savedRange) selectAllContent();
+  applyToSavedSelection("foreColor", "#000000");
+  colorBtn.style.borderBottom = "";
+  colorMenu.classList.remove("visible");
+});
+
+let lastHighlightColor = "#ffeb3b";
+
+highlightBtn.addEventListener("mousedown", (event) => {
+  event.preventDefault();
+});
+
+highlightBtn.addEventListener("click", () => {
+  hideColorMenus();
+  window.notesAPI.openColorPicker({
+    noteId,
+    origin: "highlight",
+    currentColor: lastHighlightColor,
+    noteColor: noteEl.style.background,
+  });
+});
+
+highlightBtn.addEventListener("contextmenu", (event) => {
+  event.preventDefault();
+  showMenuAboveButton(highlightMenu, highlightBtn);
+});
+
+resetHighlightBtn.addEventListener("click", () => {
+  if (!savedRange) selectAllContent();
+  applyToSavedSelection("hiliteColor", "transparent");
+  highlightBtn.style.borderBottom = "";
+  highlightMenu.classList.remove("visible");
+});
+
+window.notesAPI.onApplyPickedColor(({ color, origin }) => {
+  if (origin === "text") {
+    applyToSavedSelection("foreColor", color);
+    colorBtn.style.borderBottom = `3px solid ${color}`;
+  } else if (origin === "highlight") {
+    lastHighlightColor = color;
+    applyToSavedSelection("hiliteColor", color);
+    highlightBtn.style.borderBottom = `3px solid ${color}`;
+  } else if (origin === "note") {
+    applyNoteColor(color);
+    window.notesAPI.updateNote({ id: noteId, color });
+  }
+});
 
 colorOptions.forEach((option) => {
   option.addEventListener("click", () => {
@@ -171,24 +379,22 @@ colorOptions.forEach((option) => {
 });
 
 const gearBtn = document.getElementById("customColorBtn");
-const noteColorPicker = document.getElementById("noteColorPicker");
 const noteColorMenu = document.getElementById("noteColorMenu");
 const resetNoteColorBtn = document.getElementById("resetNoteColorBtn");
 
 gearBtn.addEventListener("click", () => {
-  noteColorPicker.click();
+  window.notesAPI.openColorPicker({
+    noteId,
+    origin: "note",
+    currentColor: noteEl.style.background,
+    noteColor: noteEl.style.background,
+  });
 });
 
 gearBtn.addEventListener("contextmenu", (event) => {
   event.preventDefault();
   closeMenu();
   noteColorMenu.classList.add("visible");
-});
-
-noteColorPicker.addEventListener("input", (event) => {
-  const color = event.target.value;
-  applyNoteColor(color);
-  window.notesAPI.updateNote({ id: noteId, color });
 });
 
 resetNoteColorBtn.addEventListener("click", () => {
@@ -215,6 +421,15 @@ function updateZOrderUI(zOrder) {
   });
 }
 
+function closeMenu() {
+  menu.classList.remove("visible");
+}
+
+function hideColorMenus() {
+  colorMenu.classList.remove("visible");
+  highlightMenu.classList.remove("visible");
+}
+
 menuBtn.addEventListener("click", (event) => {
   event.stopPropagation();
   menu.classList.toggle("visible");
@@ -224,17 +439,22 @@ document.addEventListener("click", (event) => {
   if (!menu.contains(event.target) && event.target !== menuBtn) {
     closeMenu();
   }
-  if (!colorMenu.contains(event.target) && event.target !== colorBtn) {
+  if (!colorMenu.contains(event.target) && !colorBtn.contains(event.target)) {
     colorMenu.classList.remove("visible");
   }
-  if (!noteColorMenu.contains(event.target) && event.target !== gearBtn) {
+  if (
+    !highlightMenu.contains(event.target) &&
+    !highlightBtn.contains(event.target)
+  ) {
+    highlightMenu.classList.remove("visible");
+  }
+  if (
+    !noteColorMenu.contains(event.target) &&
+    !gearBtn.contains(event.target)
+  ) {
     noteColorMenu.classList.remove("visible");
   }
 });
-
-function closeMenu() {
-  menu.classList.remove("visible");
-}
 
 newBtn.addEventListener("click", () => {
   window.notesAPI.createNote();
@@ -242,4 +462,124 @@ newBtn.addEventListener("click", () => {
 
 closeBtn.addEventListener("click", () => {
   window.notesAPI.deleteNote(noteId);
+});
+
+async function saveAsFlow() {
+  const filePath = await window.notesAPI.saveNoteAs();
+  if (filePath) {
+    notePath = filePath;
+    saveBtn.classList.add("saved");
+    saveBtn.title = "Save as...";
+  }
+  return filePath;
+}
+
+async function saveQuickFlow() {
+  const filePath = await window.notesAPI.saveNote();
+  if (filePath) return filePath;
+  return saveAsFlow();
+}
+
+saveBtn.addEventListener("click", () => {
+  saveAsFlow();
+});
+
+openBtn.addEventListener("click", () => {
+  window.notesAPI.openNoteFile();
+});
+
+const searchBar = document.getElementById("searchBar");
+const searchInput = document.getElementById("searchInput");
+const searchCloseBtn = document.getElementById("searchCloseBtn");
+
+function openSearchBar() {
+  searchBar.classList.add("visible");
+  searchInput.value = "";
+  collapseSelectionToStart();
+  searchInput.focus();
+}
+function closeSearchBar() {
+  searchBar.classList.remove("visible");
+  window.getSelection().removeAllRanges();
+  content.focus();
+}
+function collapseSelectionToStart() {
+  const selection = window.getSelection();
+  const range = document.createRange();
+  range.selectNodeContents(content);
+  range.collapse(true);
+  selection.removeAllRanges();
+  selection.addRange(range);
+}
+function findNext(backwards = false) {
+  const term = searchInput.value.trim();
+  if (!term) return;
+  window.find(term, false, backwards, true, false, true, false);
+  searchInput.focus();
+}
+searchInput.addEventListener("keydown", (event) => {
+  if (event.key === "Enter") {
+    event.preventDefault();
+    findNext(event.shiftKey);
+  } else if (event.key === "Escape") {
+    event.preventDefault();
+    closeSearchBar();
+  }
+});
+searchInput.addEventListener("input", () => {
+  collapseSelectionToStart();
+  findNext(false);
+});
+searchCloseBtn.addEventListener("click", closeSearchBar);
+
+document.addEventListener("keydown", (event) => {
+  if (event.target === searchInput) return;
+  const mod = event.ctrlKey || event.metaKey;
+  const key = event.key.toLowerCase();
+
+  if (mod && !event.shiftKey && key === "z") {
+    event.preventDefault();
+    applyEditCommand("undo");
+    return;
+  }
+  if (mod && key === "y") {
+    event.preventDefault();
+    applyEditCommand("redo");
+    return;
+  }
+  if (mod && !event.shiftKey && ["b", "i", "u"].includes(key)) {
+    event.preventDefault();
+    const map = { b: "bold", i: "italic", u: "underline" };
+    applyEditCommand(map[key]);
+    return;
+  }
+  if (mod && !event.shiftKey && key === "n") {
+    event.preventDefault();
+    window.notesAPI.createNote();
+    return;
+  }
+  if (mod && key === "s") {
+    event.preventDefault();
+    if (event.shiftKey) saveAsFlow();
+    else saveQuickFlow();
+    return;
+  }
+  if (mod && key === "o") {
+    event.preventDefault();
+    window.notesAPI.openNoteFile();
+    return;
+  }
+  if (mod && key === "f") {
+    event.preventDefault();
+    openSearchBar();
+    return;
+  }
+  if (event.key === "Escape") {
+    event.preventDefault();
+    closeMenu();
+    hideColorMenus();
+    noteColorMenu.classList.remove("visible");
+    if (searchBar.classList.contains("visible")) closeSearchBar();
+    return;
+  }
 });

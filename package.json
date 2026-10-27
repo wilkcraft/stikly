@@ -1,6 +1,6 @@
 {
   "name": "stikly",
-  "version": "1.0.5",
+  "version": "1.2.5",
   "description": "Sticky notes for the Windows 10/11 desktop",
   "main": "main.js",
   "author": "Wilkcraft",
@@ -41,6 +41,8 @@
     "files": [
       "main.js",
       "preload.js",
+      "preload-picker.js",
+      "preload-library.js",
       "src/**/*",
       "build/**/*",
       "windows-window.ps1",
