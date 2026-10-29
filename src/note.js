@@ -3,9 +3,6 @@ const content = document.getElementById("content");
 const closeBtn = document.getElementById("closeBtn");
 const newBtn = document.getElementById("newBtn");
 const menuBtn = document.getElementById("menuBtn");
-const menu = document.getElementById("menu");
-const colorOptions = document.querySelectorAll(".color-option");
-const zOrderOptions = document.querySelectorAll("[data-zorder]");
 const toolbarButtons = document.querySelectorAll("[data-command]");
 const toolbar = document.querySelector(".toolbar");
 const saveBtn = document.getElementById("saveBtn");
@@ -43,6 +40,7 @@ function getLuminance(hex) {
 function applyNoteColor(color) {
   noteEl.style.background = color;
   const isDark = getLuminance(color) < 140;
+  noteEl.style.setProperty("--collapse-ink", isDark ? "#fff" : "#000");
   if (isDark) {
     noteEl.style.setProperty("--band-overlay", "rgba(255, 255, 255, 0.14)");
     noteEl.style.setProperty("--band-border", "rgba(255, 255, 255, 0.2)");
@@ -64,21 +62,33 @@ function rgbStringToHex(rgbStr) {
   );
 }
 
-window.notesAPI.onInit(({ id, html, text, color, zOrder, filePath }) => {
-  noteId = id;
-  notePath = filePath || null;
-  if (html) {
-    content.innerHTML = html;
-  } else if (text) {
-    content.textContent = text;
-  } else {
-    content.innerHTML = "";
-  }
-  applyNoteColor(color || DEFAULT_NOTE_COLOR);
-  updateZOrderUI(zOrder || "normal");
-  saveBtn.classList.toggle("saved", !!notePath);
-  saveBtn.title = notePath ? "Save as..." : "Save note";
-});
+window.notesAPI.onInit(
+  ({
+    id,
+    html,
+    text,
+    color,
+    zOrder,
+    filePath,
+    topCollapsed,
+    bottomCollapsed,
+  }) => {
+    noteId = id;
+    notePath = filePath || null;
+    if (html) {
+      content.innerHTML = html;
+    } else if (text) {
+      content.textContent = text;
+    } else {
+      content.innerHTML = "";
+    }
+    applyNoteColor(color || DEFAULT_NOTE_COLOR);
+    setTopCollapsed(!!topCollapsed);
+    setBottomCollapsed(!!bottomCollapsed);
+    saveBtn.classList.toggle("saved", !!notePath);
+    saveBtn.title = notePath ? "Save as..." : "Save note";
+  },
+);
 
 function saveContent() {
   if (!noteId) return;
@@ -366,65 +376,6 @@ window.notesAPI.onApplyPickedColor(({ color, origin }) => {
   }
 });
 
-colorOptions.forEach((option) => {
-  option.addEventListener("click", () => {
-    const color = option.dataset.color;
-    applyNoteColor(color);
-    window.notesAPI.updateNote({
-      id: noteId,
-      color,
-    });
-    closeMenu();
-  });
-});
-
-const gearBtn = document.getElementById("customColorBtn");
-const noteColorMenu = document.getElementById("noteColorMenu");
-const resetNoteColorBtn = document.getElementById("resetNoteColorBtn");
-
-gearBtn.addEventListener("click", () => {
-  window.notesAPI.openColorPicker({
-    noteId,
-    origin: "note",
-    currentColor: noteEl.style.background,
-    noteColor: noteEl.style.background,
-  });
-});
-
-gearBtn.addEventListener("contextmenu", (event) => {
-  event.preventDefault();
-  closeMenu();
-  noteColorMenu.classList.add("visible");
-});
-
-resetNoteColorBtn.addEventListener("click", () => {
-  applyNoteColor(DEFAULT_NOTE_COLOR);
-  window.notesAPI.updateNote({ id: noteId, color: DEFAULT_NOTE_COLOR });
-  noteColorMenu.classList.remove("visible");
-});
-
-zOrderOptions.forEach((option) => {
-  option.addEventListener("click", () => {
-    const zOrder = option.dataset.zorder;
-    window.notesAPI.updateNote({
-      id: noteId,
-      zOrder,
-    });
-    updateZOrderUI(zOrder);
-    closeMenu();
-  });
-});
-
-function updateZOrderUI(zOrder) {
-  zOrderOptions.forEach((option) => {
-    option.classList.toggle("selected", option.dataset.zorder === zOrder);
-  });
-}
-
-function closeMenu() {
-  menu.classList.remove("visible");
-}
-
 function hideColorMenus() {
   colorMenu.classList.remove("visible");
   highlightMenu.classList.remove("visible");
@@ -432,13 +383,10 @@ function hideColorMenus() {
 
 menuBtn.addEventListener("click", (event) => {
   event.stopPropagation();
-  menu.classList.toggle("visible");
+  window.notesAPI.toggleMenu(noteId);
 });
 
 document.addEventListener("click", (event) => {
-  if (!menu.contains(event.target) && event.target !== menuBtn) {
-    closeMenu();
-  }
   if (!colorMenu.contains(event.target) && !colorBtn.contains(event.target)) {
     colorMenu.classList.remove("visible");
   }
@@ -447,12 +395,6 @@ document.addEventListener("click", (event) => {
     !highlightBtn.contains(event.target)
   ) {
     highlightMenu.classList.remove("visible");
-  }
-  if (
-    !noteColorMenu.contains(event.target) &&
-    !gearBtn.contains(event.target)
-  ) {
-    noteColorMenu.classList.remove("visible");
   }
 });
 
@@ -576,10 +518,41 @@ document.addEventListener("keydown", (event) => {
   }
   if (event.key === "Escape") {
     event.preventDefault();
-    closeMenu();
+    window.notesAPI.closeMenu(noteId);
     hideColorMenus();
-    noteColorMenu.classList.remove("visible");
     if (searchBar.classList.contains("visible")) closeSearchBar();
     return;
   }
+});
+
+const toggleTopBtn = document.getElementById("toggleTopBtn");
+const toggleBottomBtn = document.getElementById("toggleBottomBtn");
+
+function setTopCollapsed(collapsed) {
+  noteEl.classList.toggle("top-collapsed", collapsed);
+  toggleTopBtn.title = collapsed ? "Show top bar" : "Hide top bar";
+  if (collapsed) {
+    window.notesAPI.closeMenu(noteId);
+  }
+}
+
+function setBottomCollapsed(collapsed) {
+  noteEl.classList.toggle("bottom-collapsed", collapsed);
+  toggleBottomBtn.title = collapsed ? "Show bottom bar" : "Hide bottom bar";
+  if (collapsed) {
+    hideColorMenus();
+    searchBar.classList.remove("visible");
+  }
+}
+
+toggleTopBtn.addEventListener("click", () => {
+  const collapsed = !noteEl.classList.contains("top-collapsed");
+  setTopCollapsed(collapsed);
+  window.notesAPI.updateNote({ id: noteId, topCollapsed: collapsed });
+});
+
+toggleBottomBtn.addEventListener("click", () => {
+  const collapsed = !noteEl.classList.contains("bottom-collapsed");
+  setBottomCollapsed(collapsed);
+  window.notesAPI.updateNote({ id: noteId, bottomCollapsed: collapsed });
 });

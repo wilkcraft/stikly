@@ -8,6 +8,7 @@ const {
   nativeTheme,
   dialog,
   shell,
+  screen,
 } = require("electron");
 const { execFile } = require("child_process");
 const path = require("path");
@@ -247,6 +248,8 @@ function saveNoteToFile(win) {
     text: win.noteData.text || "",
     color: win.noteData.color || "#fff59d",
     zOrder: win.noteData.zOrder || "normal",
+    topCollapsed: !!win.noteData.topCollapsed,
+    bottomCollapsed: !!win.noteData.bottomCollapsed,
   };
   fs.mkdirSync(path.dirname(win.noteData.filePath), { recursive: true });
   fs.writeFileSync(
@@ -368,6 +371,8 @@ function createNoteWindow(note, filePath) {
     text: note.text || "",
     color: note.color || "#fff59d",
     zOrder: note.zOrder || "normal",
+    topCollapsed: !!note.topCollapsed,
+    bottomCollapsed: !!note.bottomCollapsed,
     filePath: filePath || note.filePath || null,
   };
 
@@ -379,6 +384,10 @@ function createNoteWindow(note, filePath) {
   });
 
   win.noteId = note.id;
+  win.on("focus", () => closeMenuFor(note.id));
+  const followPickers = () => repositionPickersFor(note.id);
+  win.on("move", followPickers);
+  win.on("resize", followPickers);
   win.loadFile(path.join(__dirname, "src", "note.html"));
 
   win.once("ready-to-show", () => {
@@ -400,6 +409,8 @@ function createNoteWindow(note, filePath) {
       text: win.noteData.text,
       color: win.noteData.color,
       zOrder: win.noteData.zOrder,
+      topCollapsed: win.noteData.topCollapsed,
+      bottomCollapsed: win.noteData.bottomCollapsed,
       filePath: win.noteData.filePath,
     });
   });
@@ -421,6 +432,8 @@ function createNoteWindow(note, filePath) {
         pWin.close();
       }
     }
+    const mWin = menuWindows.get(note.id);
+    if (mWin && !mWin.isDestroyed()) mWin.close();
   });
   noteWindows.set(note.id, win);
   return win;
@@ -527,11 +540,14 @@ ipcMain.handle("delete-note", (event, id) => {
 });
 
 ipcMain.on("update-note", (event, data) => {
-  const { id, html, text, color, zOrder } = data;
+  const { id, html, text, color, zOrder, topCollapsed, bottomCollapsed } = data;
   const win = noteWindows.get(id);
   if (!win || win.isDestroyed()) return;
   if (html !== undefined) win.noteData.html = html;
   if (text !== undefined) win.noteData.text = text;
+  if (topCollapsed !== undefined) win.noteData.topCollapsed = topCollapsed;
+  if (bottomCollapsed !== undefined)
+    win.noteData.bottomCollapsed = bottomCollapsed;
   if (color !== undefined) {
     win.noteData.color = color;
     broadcastNoteColorToPickers(id, color);
@@ -542,40 +558,42 @@ ipcMain.on("update-note", (event, data) => {
   }
 });
 
-ipcMain.on(
-  "open-color-picker",
-  (event, { noteId, origin, currentColor, noteColor }) => {
-    const noteWin = noteWindows.get(noteId);
-    if (!noteWin || noteWin.isDestroyed()) return;
+function openColorPicker(noteId, origin, currentColor, noteColor) {
+  const noteWin = noteWindows.get(noteId);
+  if (!noteWin || noteWin.isDestroyed()) return;
 
-    const key = `${noteId}::${origin}`;
-    let win = pickerWindows.get(key);
+  const key = `${noteId}::${origin}`;
+  let win = pickerWindows.get(key);
 
-    if (win && !win.isDestroyed() && win.isVisible()) {
-      win.hide();
-      return;
+  if (win && !win.isDestroyed() && win.isVisible()) {
+    win.hide();
+    return;
+  }
+
+  for (const [otherKey, other] of pickerWindows) {
+    if (
+      otherKey !== key &&
+      other.pickerData?.noteId === noteId &&
+      !other.isDestroyed()
+    ) {
+      other.hide();
     }
+  }
 
-    for (const [otherKey, other] of pickerWindows) {
-      if (
-        otherKey !== key &&
-        other.pickerData?.noteId === noteId &&
-        !other.isDestroyed()
-      ) {
-        other.hide();
-      }
-    }
+  if (!win || win.isDestroyed()) {
+    win = createPickerWindow(key, noteId, origin);
+  }
 
-    if (!win || win.isDestroyed()) {
-      win = createPickerWindow(key, noteId, origin);
-    }
+  win.pickerData.moved = false;
+  positionPickerWindow(win, noteWin, origin);
+  win.webContents.send("init-picker", { origin, currentColor, noteColor });
+  win.show();
+  win.focus();
+}
 
-    positionPickerWindow(win, noteWin, origin);
-    win.webContents.send("init-picker", { origin, currentColor, noteColor });
-    win.show();
-    win.focus();
-  },
-);
+ipcMain.on("open-color-picker", (event, args) => {
+  openColorPicker(args.noteId, args.origin, args.currentColor, args.noteColor);
+});
 
 ipcMain.on("close-color-picker", (event) => {
   const win = BrowserWindow.fromWebContents(event.sender);
@@ -636,7 +654,15 @@ function createPickerWindow(key, noteId, origin) {
       nodeIntegration: false,
     },
   });
-  win.pickerData = { noteId, origin };
+  win.pickerData = { noteId, origin, moved: false };
+  win.pickerExpectedPos = null;
+  win.on("move", () => {
+    if (win.isDestroyed() || !win.pickerExpectedPos) return;
+    const b = win.getBounds();
+    const dx = Math.abs(b.x - win.pickerExpectedPos.x);
+    const dy = Math.abs(b.y - win.pickerExpectedPos.y);
+    if (dx > 3 || dy > 3) win.pickerData.moved = true;
+  });
   win.loadFile(path.join(__dirname, "src", "picker.html"));
   win.on("closed", () => {
     pickerWindows.delete(key);
@@ -645,13 +671,54 @@ function createPickerWindow(key, noteId, origin) {
   return win;
 }
 
-function positionPickerWindow(win, noteWin, origin) {
+function computePickerBounds(noteWin, pickerWin, origin) {
   const nb = noteWin.getBounds();
-  const pb = win.getBounds();
+  const { width: pw, height: ph } = pickerWin.getBounds();
+  const wa = screen.getDisplayMatching(nb).workArea;
   const gap = 8;
-  const x = nb.x;
-  const y = origin === "note" ? nb.y - pb.height - gap : nb.y + nb.height + gap;
-  win.setBounds({ x, y, width: pb.width, height: pb.height });
+
+  const clamp = (v, min, max) => Math.max(min, Math.min(v, Math.max(min, max)));
+  const clampX = (x) => clamp(x, wa.x, wa.x + wa.width - pw);
+  const clampY = (y) => clamp(y, wa.y, wa.y + wa.height - ph);
+
+  const above = origin === "note";
+  const primaryY = above ? nb.y - ph - gap : nb.y + nb.height + gap;
+  const fitsVertically = primaryY >= wa.y && primaryY + ph <= wa.y + wa.height;
+  if (fitsVertically) {
+    return { x: clampX(nb.x), y: primaryY, width: pw, height: ph };
+  }
+
+  const sideY = clampY(above ? nb.y : nb.y + nb.height - ph);
+
+  const leftX = nb.x - pw - gap;
+  if (leftX >= wa.x) {
+    return { x: leftX, y: sideY, width: pw, height: ph };
+  }
+
+  const rightX = nb.x + nb.width + gap;
+  return { x: clampX(rightX), y: sideY, width: pw, height: ph };
+}
+
+function positionPickerWindow(win, noteWin, origin) {
+  if (win.isDestroyed() || noteWin.isDestroyed()) return;
+  const b = computePickerBounds(noteWin, win, origin);
+  win.pickerExpectedPos = { x: b.x, y: b.y };
+  win.setBounds(b);
+}
+
+function repositionPickersFor(noteId) {
+  const noteWin = noteWindows.get(noteId);
+  if (!noteWin || noteWin.isDestroyed()) return;
+  for (const pWin of pickerWindows.values()) {
+    if (
+      !pWin.isDestroyed() &&
+      pWin.isVisible() &&
+      pWin.pickerData?.noteId === noteId &&
+      !pWin.pickerData.moved
+    ) {
+      positionPickerWindow(pWin, noteWin, pWin.pickerData.origin);
+    }
+  }
 }
 
 function broadcastNoteColorToPickers(noteId, noteColor) {
@@ -661,6 +728,159 @@ function broadcastNoteColorToPickers(noteId, noteColor) {
     }
   }
 }
+
+const MENU_W = 190;
+const MENU_H = 212;
+const MENU_PAD = 8;
+const menuWindows = new Map();
+
+function createMenuWindow(noteId) {
+  const win = new BrowserWindow({
+    width: MENU_W + MENU_PAD * 2,
+    height: MENU_H + MENU_PAD * 2,
+    frame: false,
+    transparent: true,
+    resizable: false,
+    alwaysOnTop: true,
+    skipTaskbar: true,
+    show: false,
+    webPreferences: {
+      preload: path.join(__dirname, "preload-menu.js"),
+      contextIsolation: true,
+      nodeIntegration: false,
+    },
+  });
+  win.menuData = { noteId, hiddenAt: 0 };
+  win.loadFile(path.join(__dirname, "src", "menu.html"));
+
+  win.on("blur", () => {
+    if (hasVisibleNotePicker(noteId)) return;
+    hideMenu(win);
+  });
+  win.on("closed", () => menuWindows.delete(noteId));
+
+  menuWindows.set(noteId, win);
+  return win;
+}
+
+function hasVisibleNotePicker(noteId) {
+  for (const p of pickerWindows.values()) {
+    if (
+      !p.isDestroyed() &&
+      p.isVisible() &&
+      p.pickerData?.noteId === noteId &&
+      p.pickerData.origin === "note"
+    ) {
+      return true;
+    }
+  }
+  return false;
+}
+
+function hideMenu(win) {
+  if (win && !win.isDestroyed() && win.isVisible()) {
+    win.menuData.hiddenAt = Date.now();
+    win.hide();
+  }
+}
+
+function closeMenuFor(noteId) {
+  hideMenu(menuWindows.get(noteId));
+}
+
+function computeMenuBounds(noteWin) {
+  const nb = noteWin.getBounds();
+  const wa = screen.getDisplayMatching(nb).workArea;
+  const gap = 6;
+  const clamp = (v, min, max) => Math.max(min, Math.min(v, Math.max(min, max)));
+
+  let cx, cy;
+
+  const fitsInside = 5 + MENU_W <= nb.width && 27 + MENU_H <= nb.height;
+  if (fitsInside) {
+    cx = nb.x + 5;
+    cy = nb.y + 27;
+  } else {
+    cy = clamp(nb.y, wa.y, wa.y + wa.height - MENU_H);
+    cx = nb.x - gap - MENU_W;
+    if (cx < wa.x) {
+      cx = clamp(nb.x + nb.width + gap, wa.x, wa.x + wa.width - MENU_W);
+    }
+  }
+
+  return {
+    x: Math.round(cx - MENU_PAD),
+    y: Math.round(cy - MENU_PAD),
+    width: MENU_W + MENU_PAD * 2,
+    height: MENU_H + MENU_PAD * 2,
+  };
+}
+
+function toggleMenu(noteId) {
+  const noteWin = noteWindows.get(noteId);
+  if (!noteWin || noteWin.isDestroyed()) return;
+
+  let win = menuWindows.get(noteId);
+  if (win && !win.isDestroyed()) {
+    if (win.isVisible()) {
+      hideMenu(win);
+      return;
+    }
+    if (Date.now() - win.menuData.hiddenAt < 250) return;
+  } else {
+    win = createMenuWindow(noteId);
+  }
+
+  win.setBounds(computeMenuBounds(noteWin));
+
+  const sendInit = () =>
+    win.webContents.send("init-menu", {
+      noteId,
+      zOrder: noteWin.noteData.zOrder || "normal",
+    });
+  if (win.webContents.isLoading()) {
+    win.webContents.once("did-finish-load", sendInit);
+  } else {
+    sendInit();
+  }
+
+  win.show();
+  win.focus();
+}
+
+function focusNote(noteWin) {
+  if (!noteWin.isDestroyed() && noteWin.noteData?.zOrder !== "desktop") {
+    noteWin.focus();
+  }
+}
+
+ipcMain.on("menu-toggle", (event, noteId) => toggleMenu(noteId));
+ipcMain.on("menu-close", (event, noteId) => closeMenuFor(noteId));
+
+ipcMain.on("menu-set-color", (event, { noteId, color }) => {
+  const noteWin = noteWindows.get(noteId);
+  if (!noteWin || noteWin.isDestroyed()) return;
+  if (!/^#[0-9a-f]{6}$/i.test(color)) return;
+  noteWin.webContents.send("apply-picked-color", { color, origin: "note" });
+  closeMenuFor(noteId);
+  focusNote(noteWin);
+});
+
+ipcMain.on("menu-set-zorder", (event, { noteId, zOrder }) => {
+  const noteWin = noteWindows.get(noteId);
+  if (!noteWin || noteWin.isDestroyed()) return;
+  if (!["desktop", "normal", "top"].includes(zOrder)) return;
+  noteWin.noteData.zOrder = zOrder;
+  closeMenuFor(noteId);
+  applyZOrder(noteWin, zOrder);
+});
+
+ipcMain.on("menu-open-custom-color", (event, { noteId }) => {
+  const noteWin = noteWindows.get(noteId);
+  if (!noteWin || noteWin.isDestroyed()) return;
+  const color = noteWin.noteData.color || "#fff59d";
+  openColorPicker(noteId, "note", color, color);
+});
 
 let libraryWindow = null;
 

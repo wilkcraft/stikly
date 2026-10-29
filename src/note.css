@@ -95,17 +95,6 @@ body {
   display: block;
 }
 
-.menu-section {
-  padding: 3px;
-}
-
-.menu-title {
-  font-size: 11px;
-  font-weight: 600;
-  opacity: 0.55;
-  margin: 2px 4px 6px;
-}
-
 #colorMenu,
 #highlightMenu {
   top: auto;
@@ -113,42 +102,6 @@ body {
   width: auto;
   min-width: 140px;
   padding: 4px;
-}
-
-.color-options {
-  display: flex;
-  gap: 8px;
-  padding: 3px 4px;
-}
-
-.color-option {
-  width: 26px;
-  height: 26px;
-  border-radius: 50%;
-  border: 2px solid rgba(0, 0, 0, 0.15);
-  cursor: pointer;
-  box-sizing: border-box;
-  transition: transform 0.1s;
-}
-
-.color-option:hover {
-  transform: scale(1.1);
-}
-
-.color-option.yellow {
-  background: #fff59d;
-}
-
-.color-option.green {
-  background: #c8e6c9;
-}
-
-.color-option.pink {
-  background: #f8bbd0;
-}
-
-.color-option.blue {
-  background: #bbdefb;
 }
 
 .menu-item {
@@ -288,21 +241,6 @@ body {
   background: rgba(0, 0, 0, 0.15);
 }
 
-.gear-btn {
-  width: 28px;
-  height: 28px;
-  background: #eee;
-  color: #555;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  padding: 0;
-}
-
-.gear-btn:hover {
-  background: #ddd;
-}
-
 .new-note-group {
   display: flex;
   align-items: center;
@@ -422,4 +360,67 @@ body {
 .content ul.checklist > li[data-checked="true"] {
   text-decoration: line-through;
   opacity: 0.55;
+}
+
+.top-dock,
+.bottom-dock {
+  position: relative;
+  flex: 0 0 auto;
+  z-index: 20;
+}
+
+.collapse-btn {
+  position: absolute;
+  right: 6px;
+  width: 28px;
+  height: 14px;
+  padding: 0;
+  border: none;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--collapse-ink, #000);
+  background: rgba(127, 127, 127, 0.3);
+  backdrop-filter: blur(3px);
+  opacity: 0.55;
+  -webkit-app-region: no-drag;
+}
+.collapse-btn:hover {
+  opacity: 1;
+  background: rgba(127, 127, 127, 0.5);
+}
+.collapse-btn svg {
+  width: 10px;
+  height: 10px;
+  transition: transform 0.15s ease;
+}
+
+#toggleTopBtn {
+  top: 100%;
+  border-radius: 0 0 7px 7px;
+}
+#toggleTopBtn svg {
+  transform: rotate(0deg);
+}
+.note.top-collapsed #toggleTopBtn svg {
+  transform: rotate(180deg);
+}
+
+#toggleBottomBtn {
+  bottom: 100%;
+  border-radius: 7px 7px 0 0;
+}
+#toggleBottomBtn svg {
+  transform: rotate(180deg);
+}
+.note.bottom-collapsed #toggleBottomBtn svg {
+  transform: rotate(0deg);
+}
+
+.note.top-collapsed .titlebar {
+  display: none;
+}
+.note.bottom-collapsed .toolbar {
+  display: none;
 }

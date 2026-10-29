@@ -15,4 +15,7 @@ contextBridge.exposeInMainWorld("notesAPI", {
   openColorPicker: (data) => ipcRenderer.send("open-color-picker", data),
   onApplyPickedColor: (cb) =>
     ipcRenderer.on("apply-picked-color", (e, data) => cb(data)),
+
+  toggleMenu: (id) => ipcRenderer.send("menu-toggle", id),
+  closeMenu: (id) => ipcRenderer.send("menu-close", id),
 });
