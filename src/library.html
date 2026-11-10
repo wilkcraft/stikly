@@ -19,16 +19,26 @@
         <button type="button" id="updateBtn" class="update-btn" hidden>
           ⬆ New version available
         </button>
-        <div class="theme-switch" role="group" aria-label="Theme">
+        <div class="topbar-right">
+          <div class="theme-switch" role="group" aria-label="Theme">
+            <button
+              type="button"
+              data-pref="system"
+              title="Auto (follows Windows)"
+            >
+              Auto
+            </button>
+            <button type="button" data-pref="light" title="Light">☀</button>
+            <button type="button" data-pref="dark" title="Dark">☾</button>
+          </div>
           <button
             type="button"
-            data-pref="system"
-            title="Auto (follows Windows)"
+            id="settingsBtn"
+            class="icon-pill"
+            title="Settings"
           >
-            Auto
+            &#9881;
           </button>
-          <button type="button" data-pref="light" title="Light">☀</button>
-          <button type="button" data-pref="dark" title="Dark">☾</button>
         </div>
       </div>
     </header>
@@ -58,6 +68,37 @@
           placeholder="Search your notes…"
           spellcheck="false"
         />
+
+        <div class="filters">
+          <label class="chk">
+            <input type="checkbox" id="deepSearch" /> Search inside notes
+          </label>
+          <select id="sortSelect" aria-label="Sort by">
+            <option value="recent">Sort: Recent</option>
+            <option value="name">Sort: Name</option>
+            <option value="color">Sort: Color</option>
+          </select>
+          <div class="theme-switch" role="group" aria-label="View">
+            <button type="button" data-view="board" aria-pressed="true">
+              Board
+            </button>
+            <button type="button" data-view="list" aria-pressed="false">
+              List
+            </button>
+          </div>
+        </div>
+        <div
+          id="colorFilter"
+          class="color-filter"
+          aria-label="Filter by color"
+          hidden
+        ></div>
+        <div
+          id="tagFilter"
+          class="tag-filter"
+          aria-label="Filter by tag"
+          hidden
+        ></div>
       </section>
 
       <section id="board" class="board" aria-label="Saved notes"></section>
@@ -86,6 +127,55 @@
           </button>
           <button type="button" id="updateDownload" class="paper-btn primary">
             Go to download page
+          </button>
+        </div>
+      </div>
+    </div>
+
+    <div id="settingsModal" class="modal" hidden>
+      <div
+        class="modal-card"
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby="settingsTitle"
+      >
+        <h2 id="settingsTitle">Settings</h2>
+
+        <label class="set-row">
+          <input type="checkbox" id="setLogin" /> Start Stikly with Windows
+        </label>
+
+        <fieldset class="set-group">
+          <legend>When Stikly starts, open…</legend>
+          <label
+            ><input type="radio" name="startupMode" value="panel" /> The
+            &ldquo;My notes&rdquo; panel</label
+          >
+          <label
+            ><input type="radio" name="startupMode" value="restore" /> The notes
+            I had open</label
+          >
+          <label
+            ><input type="radio" name="startupMode" value="selected" /> Only the
+            notes marked &#128640; (mark them in the panel)</label
+          >
+        </fieldset>
+
+        <label class="set-row">
+          <input type="checkbox" id="setShortcutOn" /> Global shortcut for a new
+          note
+        </label>
+        <input
+          type="text"
+          id="setShortcut"
+          readonly
+          placeholder="Click and press a combination"
+        />
+        <p id="shortcutMsg" class="hint"></p>
+
+        <div class="modal-actions">
+          <button type="button" id="settingsClose" class="paper-btn primary">
+            Close
           </button>
         </div>
       </div>

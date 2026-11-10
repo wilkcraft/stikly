@@ -4,6 +4,32 @@ const countLabel = document.getElementById("countLabel");
 const searchInput = document.getElementById("searchInput");
 let allNotes = [];
 
+const colorFilter = document.getElementById("colorFilter");
+const tagFilter = document.getElementById("tagFilter");
+const sortSelect = document.getElementById("sortSelect");
+const deepSearch = document.getElementById("deepSearch");
+const viewButtons = document.querySelectorAll("[data-view]");
+
+const ui = Object.assign(
+  { view: "board", sort: "recent", deep: false },
+  (() => {
+    try {
+      return JSON.parse(localStorage.getItem("stikly-ui")) || {};
+    } catch {
+      return {};
+    }
+  })(),
+  { color: "", tag: "" },
+);
+function saveUi() {
+  try {
+    localStorage.setItem(
+      "stikly-ui",
+      JSON.stringify({ view: ui.view, sort: ui.sort, deep: ui.deep }),
+    );
+  } catch {}
+}
+
 function el(tag, className, text) {
   const node = document.createElement(tag);
   if (className) node.className = className;
@@ -11,10 +37,7 @@ function el(tag, className, text) {
   return node;
 }
 
-function isDarkColor(color) {
-  let r = 255,
-    g = 245,
-    b = 157;
+function parseRgb(color) {
   const hex = /^#([0-9a-f]{3}|[0-9a-f]{6})$/i.exec(color);
   if (hex) {
     let h = hex[1];
@@ -24,14 +47,30 @@ function isDarkColor(color) {
         .map((c) => c + c)
         .join("");
     const n = parseInt(h, 16);
-    r = (n >> 16) & 255;
-    g = (n >> 8) & 255;
-    b = n & 255;
-  } else {
-    const m = String(color).match(/\d+/g);
-    if (m && m.length >= 3) [r, g, b] = m.map(Number);
+    return [(n >> 16) & 255, (n >> 8) & 255, n & 255];
   }
+  const m = String(color).match(/\d+/g);
+  return m && m.length >= 3 ? m.slice(0, 3).map(Number) : [255, 245, 157];
+}
+
+function isDarkColor(color) {
+  const [r, g, b] = parseRgb(color);
   return (r * 299 + g * 587 + b * 114) / 1000 < 140;
+}
+
+function hueOf(color) {
+  const [r, g, b] = parseRgb(color).map((v) => v / 255);
+  const max = Math.max(r, g, b),
+    min = Math.min(r, g, b),
+    d = max - min;
+  if (d < 0.08) return 999;
+  const h =
+    max === r
+      ? ((g - b) / d) % 6
+      : max === g
+        ? (b - r) / d + 2
+        : (r - g) / d + 4;
+  return (h * 60 + 360) % 360;
 }
 
 function formatDate(ms) {
@@ -150,10 +189,50 @@ function buildPreview(note) {
   return box;
 }
 
-function createCard(note) {
+async function setMeta(note, patch) {
+  await window.libraryAPI.setMeta(note.filePath, patch);
+  await refresh();
+}
+
+function miniBtn(label, title, pressed, onClick) {
+  const b = el("button", "card-btn" + (pressed ? " on" : ""), label);
+  b.type = "button";
+  b.title = title;
+  b.setAttribute("aria-pressed", String(!!pressed));
+  b.addEventListener("click", (e) => {
+    e.stopPropagation();
+    onClick();
+  });
+  b.addEventListener("keydown", (e) => e.stopPropagation());
+  return b;
+}
+
+function openTagInput(card, note) {
+  if (card.querySelector(".tag-input")) return;
+  const input = el("input", "tag-input");
+  input.type = "text";
+  input.placeholder = "tag + Enter";
+  input.maxLength = 30;
+  input.addEventListener("click", (e) => e.stopPropagation());
+  input.addEventListener("keydown", (e) => {
+    e.stopPropagation();
+    if (e.key === "Enter") {
+      const t = input.value.trim().replace(/^#/, "").toLowerCase();
+      if (t) setMeta(note, { tags: [...note.tags, t] });
+      else input.remove();
+    } else if (e.key === "Escape") input.remove();
+  });
+  input.addEventListener("blur", () => input.remove());
+  card.querySelector(".card-foot").before(input);
+  input.focus();
+}
+
+function createCard(note, q) {
   const card = el(
     "article",
-    "note-card" + (isDarkColor(note.color) ? " dark-note" : ""),
+    "note-card" +
+      (isDarkColor(note.color) ? " dark-note" : "") +
+      (note.pinned ? " is-pinned" : ""),
   );
   card.tabIndex = 0;
   card.setAttribute("role", "button");
@@ -163,13 +242,38 @@ function createCard(note) {
   card.appendChild(el("div", "pin"));
   if (note.isOpen) card.appendChild(el("span", "open-badge", "Open"));
 
-  card.appendChild(el("h3", "card-title", note.name));
-  card.appendChild(buildPreview(note));
+  const title = el("h3", "card-title", note.name);
+  const preview = buildPreview(note);
+  card.append(title, preview);
 
-  const foot = el("div", "card-foot");
-  foot.appendChild(el("span", "", formatDate(note.modified)));
+  if (q) {
+    highlightIn(title, q);
+    const hits = highlightIn(preview, q);
+    if (ui.deep && !hits) {
+      const sn = buildSnippet(note.body || "", q);
+      if (sn) card.appendChild(sn);
+    }
+  }
 
-  const del = el("button", "card-delete", "🗑");
+  if (note.tags.length) {
+    const row = el("div", "card-tags");
+    for (const t of note.tags) {
+      const chip = el("span", "tag-chip", "#" + t);
+      const x = el("button", "tag-x", "\u00D7");
+      x.type = "button";
+      x.title = "Remove tag";
+      x.addEventListener("click", (e) => {
+        e.stopPropagation();
+        setMeta(note, { tags: note.tags.filter((v) => v !== t) });
+      });
+      x.addEventListener("keydown", (e) => e.stopPropagation());
+      chip.appendChild(x);
+      row.appendChild(chip);
+    }
+    card.appendChild(row);
+  }
+
+  const del = el("button", "card-delete", "\u{1F5D1}");
   del.type = "button";
   del.title = "Move to Recycle Bin";
   let armed = false;
@@ -182,7 +286,7 @@ function createCard(note) {
       del.classList.add("armed");
       timer = setTimeout(() => {
         armed = false;
-        del.textContent = "🗑";
+        del.textContent = "\u{1F5D1}";
         del.classList.remove("armed");
       }, 3000);
       return;
@@ -192,7 +296,27 @@ function createCard(note) {
     await refresh();
   });
   del.addEventListener("keydown", (e) => e.stopPropagation());
-  foot.appendChild(del);
+
+  const foot = el("div", "card-foot");
+  foot.appendChild(el("span", "", formatDate(note.modified)));
+  const actions = el("div", "card-actions");
+  actions.append(
+    miniBtn(
+      "\u{1F4CC}",
+      note.pinned ? "Unpin" : "Pin to the top",
+      note.pinned,
+      () => setMeta(note, { pinned: !note.pinned }),
+    ),
+    miniBtn(
+      "\u{1F680}",
+      "Open this note when Stikly starts",
+      note.autoStart,
+      () => setMeta(note, { autoStart: !note.autoStart }),
+    ),
+    miniBtn("\u{1F3F7}", "Add tag", false, () => openTagInput(card, note)),
+    del,
+  );
+  foot.appendChild(actions);
   card.appendChild(foot);
 
   card.addEventListener("click", (e) => openNote(note, e.shiftKey));
@@ -205,13 +329,76 @@ function createCard(note) {
   return card;
 }
 
+function visibleNotes(q) {
+  const list = allNotes.filter((n) => {
+    if (ui.color && n.color.toLowerCase() !== ui.color) return false;
+    if (ui.tag && !n.tags.includes(ui.tag)) return false;
+    if (!q) return true;
+    const hay = (
+      n.name +
+      " " +
+      n.tags.join(" ") +
+      " " +
+      (ui.deep ? n.body : n.text)
+    ).toLowerCase();
+    return hay.includes(q);
+  });
+  const cmp = {
+    recent: (a, b) => b.modified - a.modified,
+    name: (a, b) =>
+      a.name.localeCompare(b.name, undefined, {
+        numeric: true,
+        sensitivity: "base",
+      }),
+    color: (a, b) => hueOf(a.color) - hueOf(b.color) || b.modified - a.modified,
+  }[ui.sort];
+  return list.sort((a, b) => b.pinned - a.pinned || cmp(a, b));
+}
+
+function renderFilters() {
+  const colors = [...new Set(allNotes.map((n) => n.color.toLowerCase()))];
+  const tags = [...new Set(allNotes.flatMap((n) => n.tags))].sort();
+  if (ui.color && !colors.includes(ui.color)) ui.color = "";
+  if (ui.tag && !tags.includes(ui.tag)) ui.tag = "";
+
+  colorFilter.replaceChildren(
+    ...colors.map((c) => {
+      const b = el("button", "color-dot");
+      b.type = "button";
+      b.style.background = c;
+      b.title = "Filter by this color";
+      b.setAttribute("aria-pressed", String(ui.color === c));
+      b.addEventListener("click", () => {
+        ui.color = ui.color === c ? "" : c;
+        render();
+      });
+      return b;
+    }),
+  );
+  colorFilter.hidden = colors.length < 2;
+
+  tagFilter.replaceChildren(
+    ...tags.map((t) => {
+      const b = el("button", "tag-btn", "#" + t);
+      b.type = "button";
+      b.setAttribute("aria-pressed", String(ui.tag === t));
+      b.addEventListener("click", () => {
+        ui.tag = ui.tag === t ? "" : t;
+        render();
+      });
+      return b;
+    }),
+  );
+  tagFilter.hidden = tags.length === 0;
+}
+
 function render() {
   const q = searchInput.value.trim().toLowerCase();
-  const notes = q
-    ? allNotes.filter((n) => (n.name + " " + n.text).toLowerCase().includes(q))
-    : allNotes;
+  renderFilters();
+  const notes = visibleNotes(q);
 
-  board.replaceChildren(...notes.map(createCard));
+  board.classList.toggle("list-view", ui.view === "list");
+  board.replaceChildren(...notes.map((n) => createCard(n, q)));
 
   board.querySelectorAll(".card-preview").forEach((p) => {
     p.classList.toggle("clipped", p.scrollHeight > p.clientHeight + 1);
@@ -229,7 +416,7 @@ function render() {
     emptyState.textContent =
       total === 0
         ? "Your notes will show up here once you save them."
-        : "No notes match your search.";
+        : "No notes match your search or filters.";
     emptyState.classList.add("visible");
   } else {
     emptyState.classList.remove("visible");
@@ -365,7 +552,10 @@ updateModal.addEventListener("click", (e) => {
   if (e.target === updateModal) updateModal.hidden = true;
 });
 document.addEventListener("keydown", (e) => {
-  if (e.key === "Escape") updateModal.hidden = true;
+  if (e.key === "Escape") {
+    updateModal.hidden = true;
+    settingsModal.hidden = true;
+  }
 });
 
 updateOpt.addEventListener("change", async () => {
@@ -375,8 +565,138 @@ updateOpt.addEventListener("change", async () => {
   if (!updateOpt.checked) setUpdate(null);
 });
 
+function highlightIn(root, q) {
+  const walker = document.createTreeWalker(root, NodeFilter.SHOW_TEXT);
+  const nodes = [];
+  while (walker.nextNode()) nodes.push(walker.currentNode);
+  let count = 0;
+  for (const node of nodes) {
+    const text = node.nodeValue;
+    const lower = text.toLowerCase();
+    let i = lower.indexOf(q);
+    if (i < 0) continue;
+    const frag = document.createDocumentFragment();
+    let last = 0;
+    while (i >= 0) {
+      frag.append(text.slice(last, i));
+      const m = document.createElement("mark");
+      m.className = "hit";
+      m.textContent = text.slice(i, i + q.length);
+      frag.append(m);
+      count++;
+      last = i + q.length;
+      i = lower.indexOf(q, last);
+    }
+    frag.append(text.slice(last));
+    node.replaceWith(frag);
+  }
+  return count;
+}
+
+function buildSnippet(body, q) {
+  const i = body.toLowerCase().indexOf(q);
+  if (i < 0) return null;
+  const start = Math.max(0, i - 40);
+  const text =
+    (start ? "\u2026" : "") +
+    body.slice(start, i + q.length + 60).replace(/\s+/g, " ") +
+    "\u2026";
+  const p = el("p", "card-snippet", text);
+  highlightIn(p, q);
+  return p;
+}
+
 window.libraryAPI.onUpdate(setUpdate);
 window.libraryAPI.getUpdate().then(setUpdate);
 window.libraryAPI.getUpdateChecks().then((v) => (updateOpt.checked = v));
+
+sortSelect.value = ui.sort;
+deepSearch.checked = ui.deep;
+sortSelect.addEventListener("change", () => {
+  ui.sort = sortSelect.value;
+  saveUi();
+  render();
+});
+deepSearch.addEventListener("change", () => {
+  ui.deep = deepSearch.checked;
+  saveUi();
+  render();
+});
+
+function markView() {
+  viewButtons.forEach((b) =>
+    b.setAttribute("aria-pressed", String(b.dataset.view === ui.view)),
+  );
+}
+viewButtons.forEach((b) =>
+  b.addEventListener("click", () => {
+    ui.view = b.dataset.view;
+    saveUi();
+    markView();
+    render();
+  }),
+);
+markView();
+
+const settingsBtn = document.getElementById("settingsBtn");
+const settingsModal = document.getElementById("settingsModal");
+const setLogin = document.getElementById("setLogin");
+const setShortcutOn = document.getElementById("setShortcutOn");
+const setShortcut = document.getElementById("setShortcut");
+const shortcutMsg = document.getElementById("shortcutMsg");
+const startupRadios = document.querySelectorAll('input[name="startupMode"]');
+
+function applySettingsUI(s) {
+  setLogin.checked = s.openAtLogin;
+  startupRadios.forEach((r) => (r.checked = r.value === s.startupMode));
+  setShortcutOn.checked = s.shortcutEnabled;
+  setShortcut.value = s.shortcut;
+  setShortcut.disabled = !s.shortcutEnabled;
+  shortcutMsg.textContent =
+    s.shortcutEnabled && !s.shortcutOk
+      ? "That shortcut is used by another app. Try a different one."
+      : "";
+}
+async function pushSettings(patch) {
+  applySettingsUI(await window.libraryAPI.setSettings(patch));
+}
+
+settingsBtn.addEventListener("click", async () => {
+  applySettingsUI(await window.libraryAPI.getSettings());
+  settingsModal.hidden = false;
+});
+document
+  .getElementById("settingsClose")
+  .addEventListener("click", () => (settingsModal.hidden = true));
+settingsModal.addEventListener("click", (e) => {
+  if (e.target === settingsModal) settingsModal.hidden = true;
+});
+
+setLogin.addEventListener("change", () =>
+  pushSettings({ openAtLogin: setLogin.checked }),
+);
+startupRadios.forEach((r) =>
+  r.addEventListener(
+    "change",
+    () => r.checked && pushSettings({ startupMode: r.value }),
+  ),
+);
+setShortcutOn.addEventListener("change", () =>
+  pushSettings({ shortcutEnabled: setShortcutOn.checked }),
+);
+
+setShortcut.addEventListener("keydown", (e) => {
+  e.preventDefault();
+  if (["Control", "Shift", "Alt", "Meta"].includes(e.key)) return;
+  const mods = [];
+  if (e.ctrlKey) mods.push("Ctrl");
+  if (e.altKey) mods.push("Alt");
+  if (e.shiftKey) mods.push("Shift");
+  if (!mods.length) return;
+  let key =
+    e.key.length === 1 ? e.key.toUpperCase() : e.key.replace("Arrow", "");
+  if (key === " ") key = "Space";
+  pushSettings({ shortcut: [...mods, key].join("+") });
+});
 
 refresh();

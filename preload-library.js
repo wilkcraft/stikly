@@ -16,4 +16,8 @@ contextBridge.exposeInMainWorld("libraryAPI", {
   openLink: (url) => ipcRenderer.invoke("update:open-link", url),
   getUpdateChecks: () => ipcRenderer.invoke("update:get-enabled"),
   setUpdateChecks: (on) => ipcRenderer.invoke("update:set-enabled", on),
+  setMeta: (filePath, patch) =>
+    ipcRenderer.invoke("library:set-meta", filePath, patch),
+  getSettings: () => ipcRenderer.invoke("settings:get"),
+  setSettings: (patch) => ipcRenderer.invoke("settings:set", patch),
 });

@@ -9,6 +9,7 @@ const {
   dialog,
   shell,
   screen,
+  globalShortcut,
 } = require("electron");
 const { execFile } = require("child_process");
 const path = require("path");
@@ -32,9 +33,21 @@ function loadSettings() {
   }
 }
 
+function writeFileAtomic(file, content) {
+  fs.mkdirSync(path.dirname(file), { recursive: true });
+  const tmp = file + ".tmp";
+  fs.writeFileSync(tmp, content, "utf-8");
+  try {
+    fs.renameSync(tmp, file);
+  } catch {
+    fs.copyFileSync(tmp, file);
+    fs.rmSync(tmp, { force: true });
+  }
+}
+
 function saveSettings(patch) {
   const next = { ...loadSettings(), ...patch };
-  fs.writeFileSync(settingsFile, JSON.stringify(next, null, 2), "utf-8");
+  writeFileAtomic(settingsFile, JSON.stringify(next, null, 2));
   return next;
 }
 
@@ -104,7 +117,7 @@ function migrateLegacyNotes() {
     try {
       fs.renameSync(src, uniquePath(notesFolder, entry.name));
     } catch (e) {
-      console.error("No se pudo migrar", src, e);
+      console.error("Could not migrate", src, e);
     }
   }
 
@@ -155,10 +168,16 @@ function listSavedNotes() {
       text: String(data.text || "")
         .trim()
         .slice(0, 240),
+      body: String(data.text || "").slice(0, 100000),
       html: typeof data.html === "string" ? data.html.slice(0, 20000) : "",
       color: colorRe.test(data.color || "") ? data.color : "#fff59d",
       modified,
       isOpen: openPaths.has(normPath(filePath)),
+      pinned: !!data.pinned,
+      autoStart: !!data.autoStart,
+      tags: Array.isArray(data.tags)
+        ? data.tags.filter((t) => typeof t === "string").slice(0, 10)
+        : [],
     });
   }
   list.sort((a, b) => b.modified - a.modified);
@@ -237,52 +256,80 @@ function applyWindowsModeAsync(win, mode) {
 
 function saveNoteToFile(win) {
   if (!win || win.isDestroyed() || !win.noteData?.filePath) return;
-  const bounds = win.getBounds();
+  const b = win.getBounds();
+  const d = win.noteData;
   const data = {
     id: win.noteId,
-    x: bounds.x,
-    y: bounds.y,
-    width: bounds.width,
-    height: bounds.height,
-    html: win.noteData.html || "",
-    text: win.noteData.text || "",
-    color: win.noteData.color || "#fff59d",
-    zOrder: win.noteData.zOrder || "normal",
-    topCollapsed: !!win.noteData.topCollapsed,
-    bottomCollapsed: !!win.noteData.bottomCollapsed,
+    x: b.x,
+    y: b.y,
+    width: b.width,
+    height: b.height,
+    html: d.html || "",
+    text: d.text || "",
+    color: d.color || "#fff59d",
+    zOrder: d.zOrder || "normal",
+    topCollapsed: !!d.topCollapsed,
+    bottomCollapsed: !!d.bottomCollapsed,
+    pinned: !!d.pinned,
+    autoStart: !!d.autoStart,
+    tags: Array.isArray(d.tags) ? d.tags : [],
   };
-  fs.mkdirSync(path.dirname(win.noteData.filePath), { recursive: true });
-  fs.writeFileSync(
-    win.noteData.filePath,
-    JSON.stringify(data, null, 2),
-    "utf-8",
-  );
+  writeFileAtomic(d.filePath, JSON.stringify(data, null, 2));
+}
+
+function renameIfTitleChanged(win) {
+  const d = win.noteData;
+  const stripN = (s) => s.replace(/ \(\d+\)$/, "").toLowerCase();
+  const wanted = suggestFileName(win);
+  if (
+    stripN(path.basename(wanted, ".json")) ===
+    stripN(path.basename(d.filePath, ".json"))
+  )
+    return;
+  const target = uniquePath(path.dirname(d.filePath), wanted);
+  try {
+    if (fs.existsSync(d.filePath)) fs.renameSync(d.filePath, target);
+    d.filePath = target;
+  } catch (e) {
+    console.error("Rename failed:", e);
+  }
+}
+
+function autoSaveWindow(win) {
+  if (!win || win.isDestroyed() || win.noteData?.discarded) return;
+  const d = win.noteData;
+  try {
+    if (!d.filePath) {
+      if (!(d.text || "").trim()) return;
+      d.filePath = uniquePath(notesFolder, suggestFileName(win));
+      d.autoNamed = true;
+    } else if (d.autoNamed) {
+      renameIfTitleChanged(win);
+    }
+    saveNoteToFile(win);
+  } catch (e) {
+    console.error("Auto-save failed:", e);
+  }
 }
 
 function autoSaveAllNotes() {
-  for (const win of noteWindows.values()) {
-    if (!win || win.isDestroyed()) continue;
+  for (const win of noteWindows.values()) autoSaveWindow(win);
+}
 
-    if (win.noteData?.filePath) {
-      try {
-        saveNoteToFile(win);
-      } catch (e) {
-        console.error("Auto-save failed:", e);
-      }
-      continue;
-    }
+const AUTOSAVE_MS = 2000;
+const autosaveTimers = new Map();
 
-    const hasText = (win.noteData?.text || "").trim().length > 0;
-    if (!hasText) continue;
-
-    try {
-      win.noteData.filePath = uniquePath(notesFolder, suggestFileName(win));
-      saveNoteToFile(win);
-    } catch (e) {
-      console.error("Auto-save failed:", e);
-      win.noteData.filePath = null;
-    }
-  }
+function scheduleAutoSave(win) {
+  if (!win || win.isDestroyed()) return;
+  clearTimeout(autosaveTimers.get(win));
+  autosaveTimers.set(
+    win,
+    setTimeout(() => {
+      autosaveTimers.delete(win);
+      autoSaveWindow(win);
+      persistOpenList();
+    }, AUTOSAVE_MS),
+  );
 }
 
 function applyZOrder(win, zOrder) {
@@ -294,7 +341,7 @@ function applyZOrder(win, zOrder) {
       win.setSkipTaskbar(true);
       if (win.isVisible()) {
         applyWindowsModeAsync(win, "desktop")
-          .catch((err) => console.error("Error en desktop:", err))
+          .catch((err) => console.error("Desktop mode error:", err))
           .finally(() => {
             if (!win.isDestroyed()) {
               win.blur();
@@ -435,6 +482,11 @@ function createNoteWindow(note, filePath) {
     topCollapsed: !!note.topCollapsed,
     bottomCollapsed: !!note.bottomCollapsed,
     filePath: filePath || note.filePath || null,
+    pinned: !!note.pinned,
+    autoStart: !!note.autoStart,
+    tags: Array.isArray(note.tags) ? note.tags : [],
+    autoNamed: false,
+    discarded: false,
   };
 
   win.on("hide", () => {
@@ -449,6 +501,8 @@ function createNoteWindow(note, filePath) {
   const followPickers = () => repositionPickersFor(note.id);
   win.on("move", followPickers);
   win.on("resize", followPickers);
+  win.on("moved", () => scheduleAutoSave(win));
+  win.on("resized", () => scheduleAutoSave(win));
   win.loadFile(path.join(__dirname, "src", "note.html"));
 
   win.once("ready-to-show", () => {
@@ -482,12 +536,13 @@ function createNoteWindow(note, filePath) {
     }
   });
   win.on("close", () => {
-    if (win.noteData?.filePath) {
-      saveNoteToFile(win);
-    }
+    clearTimeout(autosaveTimers.get(win));
+    autosaveTimers.delete(win);
+    autoSaveWindow(win);
   });
   win.on("closed", () => {
     noteWindows.delete(note.id);
+    persistOpenList();
     for (const [key, pWin] of pickerWindows) {
       if (pWin.pickerData?.noteId === note.id && !pWin.isDestroyed()) {
         pWin.close();
@@ -496,8 +551,26 @@ function createNoteWindow(note, filePath) {
     const mWin = menuWindows.get(note.id);
     if (mWin && !mWin.isDestroyed()) mWin.close();
   });
+  win.on("session-end", () => {
+    autoSaveAllNotes();
+    persistOpenList();
+    quitting = true;
+  });
   noteWindows.set(note.id, win);
   return win;
+}
+
+function focusWindowReliably(win) {
+  if (!win || win.isDestroyed()) return;
+  win.setAlwaysOnTop(true);
+  win.show();
+  win.focus();
+  win.webContents.focus();
+  if (win.noteData?.zOrder !== "top") {
+    setTimeout(() => {
+      if (!win.isDestroyed()) win.setAlwaysOnTop(false);
+    }, 100);
+  }
 }
 
 function createNewNote() {
@@ -514,18 +587,58 @@ function createNewNote() {
     color: "#fff59d",
     zOrder: "normal",
   };
-  createNoteWindow(note);
+  const win = createNoteWindow(note);
+  win.once("show", () => focusWindowReliably(win));
   return id;
 }
 
-function closeAllNotes() {
+function closeNotesOnly() {
   autoSaveAllNotes();
-  for (const win of noteWindows.values()) {
-    if (!win.isDestroyed()) {
-      win.close();
-    }
+  createLibraryWindow();
+  for (const win of [...noteWindows.values()]) {
+    if (!win.isDestroyed()) win.close();
   }
+}
+
+function closeEverything() {
+  autoSaveAllNotes();
+  persistOpenList();
+  quitting = true;
+  for (const win of [...noteWindows.values()]) {
+    if (!win.isDestroyed()) win.close();
+  }
+  closeLibraryWindow();
   app.quit();
+}
+
+let quitting = false;
+
+function persistOpenList() {
+  if (quitting) return;
+  const open = [...noteWindows.values()]
+    .filter((w) => !w.isDestroyed() && w.noteData?.filePath)
+    .map((w) => w.noteData.filePath);
+  saveSettings({ lastOpen: open });
+}
+
+function openStartupNotes() {
+  const s = loadSettings();
+  const mode = ["restore", "selected"].includes(s.startupMode)
+    ? s.startupMode
+    : "panel";
+  let paths = [];
+  if (mode === "restore") paths = Array.isArray(s.lastOpen) ? s.lastOpen : [];
+  if (mode === "selected")
+    paths = listSavedNotes()
+      .filter((n) => n.autoStart)
+      .map((n) => n.filePath);
+
+  let opened = 0;
+  for (const p of paths) {
+    if (typeof p === "string" && fs.existsSync(p) && openNoteFromFile(p))
+      opened++;
+  }
+  if (opened === 0) createLibraryWindow();
 }
 
 function createTray() {
@@ -544,7 +657,8 @@ function createTray() {
     { label: "New note", click: () => createNewNote() },
     { label: "My notes", click: () => createLibraryWindow() },
     { type: "separator" },
-    { label: "Close all notes", click: () => closeAllNotes() },
+    { label: "Close all notes", click: () => closeNotesOnly() },
+    { label: "Close all", click: () => closeEverything() },
   ]);
 
   tray.setContextMenu(contextMenu);
@@ -669,13 +783,19 @@ async function initUpdates(parent) {
   if (s.updateChecks) startUpdateChecks();
 }
 
+const gotLock = app.requestSingleInstanceLock();
+if (!gotLock) app.quit();
+else app.on("second-instance", () => createLibraryWindow());
+
 app.whenReady().then(() => {
+  if (!gotLock) return;
   applyThemePreference(loadSettings().theme);
   fs.mkdirSync(notesFolder, { recursive: true });
   migrateLegacyNotes();
   createTray();
 
-  createLibraryWindow();
+  registerShortcut();
+  openStartupNotes();
 
   screen.on("display-removed", scheduleRescue);
   screen.on("display-metrics-changed", scheduleRescue);
@@ -693,6 +813,8 @@ app.whenReady().then(() => {
   }, 150);
 });
 
+app.on("will-quit", () => globalShortcut.unregisterAll());
+
 app.on("window-all-closed", () => {
   if (process.platform !== "darwin") {
     app.quit();
@@ -701,6 +823,8 @@ app.on("window-all-closed", () => {
 
 app.on("before-quit", () => {
   autoSaveAllNotes();
+  persistOpenList();
+  quitting = true;
   if (tray) {
     tray.destroy();
     tray = null;
@@ -735,6 +859,7 @@ ipcMain.on("update-note", (event, data) => {
     win.noteData.zOrder = zOrder;
     applyZOrder(win, zOrder);
   }
+  scheduleAutoSave(win);
 });
 
 function openColorPicker(noteId, origin, currentColor, noteColor) {
@@ -798,7 +923,16 @@ ipcMain.handle("save-note-as", async (event) => {
     filters: [{ name: "Stikly Notes", extensions: ["json"] }],
   });
   if (result.canceled || !result.filePath) return null;
+  const old = win.noteData.filePath;
   win.noteData.filePath = result.filePath;
+  if (
+    win.noteData.autoNamed &&
+    old &&
+    normPath(old) !== normPath(result.filePath)
+  ) {
+    fs.rm(old, { force: true }, () => {});
+  }
+  win.noteData.autoNamed = false;
   saveNoteToFile(win);
   return result.filePath;
 });
@@ -1052,6 +1186,7 @@ ipcMain.on("menu-set-zorder", (event, { noteId, zOrder }) => {
   noteWin.noteData.zOrder = zOrder;
   closeMenuFor(noteId);
   applyZOrder(noteWin, zOrder);
+  scheduleAutoSave(noteWin);
 });
 
 ipcMain.on("menu-open-custom-color", (event, { noteId }) => {
@@ -1132,6 +1267,7 @@ ipcMain.handle("library:delete", async (event, filePath) => {
       normPath(win.noteData.filePath) === target
     ) {
       win.noteData.filePath = null;
+      win.noteData.discarded = true;
       win.close();
     }
   }
@@ -1139,7 +1275,7 @@ ipcMain.handle("library:delete", async (event, filePath) => {
     await shell.trashItem(filePath);
     return true;
   } catch (e) {
-    console.error("Error al borrar nota:", e);
+    console.error("Error deleting note:", e);
     return false;
   }
 });
@@ -1161,7 +1297,7 @@ ipcMain.handle("library:import", async (event) => {
       }
       count++;
     } catch (e) {
-      console.error("Error importando", src, e);
+      console.error("Error importing", src, e);
     }
   }
   return count;
@@ -1175,6 +1311,38 @@ ipcMain.handle("library:set-theme", (event, pref) => {
   const theme = applyThemePreference(pref);
   saveSettings({ theme });
   return theme;
+});
+
+ipcMain.handle("library:set-meta", (event, filePath, patch) => {
+  if (typeof filePath !== "string" || !isInsideNotesFolder(filePath) || !patch)
+    return false;
+  const clean = {};
+  if (typeof patch.pinned === "boolean") clean.pinned = patch.pinned;
+  if (typeof patch.autoStart === "boolean") clean.autoStart = patch.autoStart;
+  if (Array.isArray(patch.tags)) {
+    clean.tags = [
+      ...new Set(
+        patch.tags.map((t) => String(t).trim().slice(0, 30)).filter(Boolean),
+      ),
+    ].slice(0, 10);
+  }
+
+  const target = normPath(filePath);
+  for (const win of noteWindows.values()) {
+    if (
+      !win.isDestroyed() &&
+      win.noteData?.filePath &&
+      normPath(win.noteData.filePath) === target
+    ) {
+      Object.assign(win.noteData, clean);
+      saveNoteToFile(win);
+      return true;
+    }
+  }
+  const data = readNoteFile(filePath);
+  if (!data) return false;
+  writeFileAtomic(filePath, JSON.stringify({ ...data, ...clean }, null, 2));
+  return true;
 });
 
 ipcMain.handle("update:get", () => updateInfo);
@@ -1192,4 +1360,63 @@ ipcMain.handle("update:set-enabled", (e, on) => {
   if (on) startUpdateChecks();
   else stopUpdateChecks();
   return !!on;
+});
+
+const DEFAULT_SHORTCUT = "Ctrl+Alt+N";
+let shortcutOk = false;
+
+function registerShortcut() {
+  globalShortcut.unregisterAll();
+  shortcutOk = false;
+  const s = loadSettings();
+  if (s.shortcutEnabled === false) return;
+  try {
+    shortcutOk = globalShortcut.register(s.shortcut || DEFAULT_SHORTCUT, () =>
+      createNewNote(),
+    );
+  } catch (e) {
+    console.error("Shortcut error:", e.message);
+  }
+}
+
+const exePath = () => process.env.PORTABLE_EXECUTABLE_FILE || process.execPath;
+
+function getSettingsView() {
+  const s = loadSettings();
+  return {
+    openAtLogin: app.isPackaged
+      ? app.getLoginItemSettings({ path: exePath() }).openAtLogin
+      : false,
+    startupMode: ["restore", "selected"].includes(s.startupMode)
+      ? s.startupMode
+      : "panel",
+    shortcutEnabled: s.shortcutEnabled !== false,
+    shortcut: s.shortcut || DEFAULT_SHORTCUT,
+    shortcutOk,
+  };
+}
+
+ipcMain.handle("settings:get", () => getSettingsView());
+
+ipcMain.handle("settings:set", (e, patch = {}) => {
+  const next = {};
+  if (["panel", "restore", "selected"].includes(patch.startupMode))
+    next.startupMode = patch.startupMode;
+  if (typeof patch.shortcutEnabled === "boolean")
+    next.shortcutEnabled = patch.shortcutEnabled;
+  if (
+    typeof patch.shortcut === "string" &&
+    /^[\w+]{1,40}$/.test(patch.shortcut)
+  )
+    next.shortcut = patch.shortcut;
+  if (Object.keys(next).length) saveSettings(next);
+
+  if (typeof patch.openAtLogin === "boolean" && app.isPackaged) {
+    app.setLoginItemSettings({
+      openAtLogin: patch.openAtLogin,
+      path: exePath(),
+    });
+  }
+  registerShortcut();
+  return getSettingsView();
 });

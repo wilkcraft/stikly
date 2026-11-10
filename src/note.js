@@ -83,6 +83,7 @@ window.notesAPI.onInit(
       content.innerHTML = "";
     }
     applyNoteColor(color || DEFAULT_NOTE_COLOR);
+    if (!html && !text) content.focus();
     setTopCollapsed(!!topCollapsed);
     setBottomCollapsed(!!bottomCollapsed);
     saveBtn.classList.toggle("saved", !!notePath);

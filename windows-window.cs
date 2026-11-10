@@ -71,7 +71,7 @@ public static class WindowApi
     {
         try
         {
-            if (hwnd == IntPtr.Zero) throw new ArgumentException("hwnd es cero");
+            if (hwnd == IntPtr.Zero) throw new ArgumentException("hwnd is zero");
             SetExtendedStyle(hwnd, WS_EX_TOOLWINDOW);
             IntPtr workerW = FindDesktopWorkerW();
             Console.WriteLine("[SetDesktop] workerW=" + workerW);
@@ -83,7 +83,7 @@ public static class WindowApi
             }
             else
             {
-                Console.Error.WriteLine("No se encontro WorkerW");
+                Console.Error.WriteLine("WorkerW not found");
             }
             SetWindowPos(hwnd, HWND_BOTTOM, 0, 0, 0, 0,
                 SWP_NOMOVE | SWP_NOSIZE | SWP_NOACTIVATE | SWP_SHOWWINDOW);
