@@ -1,21 +1,63 @@
-MIT License
+Stikly Free Distribution License 1.0
 
 Copyright (c) 2026 Wilkcraft
 
-Permission is hereby granted, free of charge, to any person obtaining a copy
-of this software and associated documentation files (the "Software"), to deal
-in the Software without restriction, including without limitation the rights
-to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
-copies of the Software, and to permit persons to whom the Software is
-furnished to do so, subject to the following conditions:
+1. Definitions
 
-The above copyright notice and this permission notice shall be included in all
-copies or substantial portions of the Software.
+“Software” means Stikly and the source code, object code, documentation,
+and other materials distributed with it under this License.
 
-THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
-IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
-FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
-AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
-LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
-OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
-SOFTWARE.
+“Modified Version” means the Software or a derivative work that has been
+changed, adapted, or combined with other code.
+
+“Fee” means any payment required to access, download, obtain, use, copy,
+or receive a license to the Software or a Modified Version. A payment
+for separate support or services is not a Fee, provided it is not required
+to obtain or use the Software.
+
+2. Permission
+
+Permission is granted, free of charge, to any person obtaining a copy of
+the Software to use, reproduce, modify, and distribute the Software and
+Modified Versions, in source or object-code form, subject to the conditions
+below.
+
+3. Conditions
+
+You may distribute the Software or a Modified Version only if:
+
+a. You do not charge a Fee for access to, download of, use of, or a license
+to the Software or Modified Version.
+
+b. You do not make access to, download of, use of, or a license to the
+Software or Modified Version conditional on payment, a paid subscription,
+or purchase of another product or service.
+
+c. You include this License and the copyright notice above with every copy
+or substantial portion of the Software or Modified Version.
+
+d. You clearly identify any changes you made and do not imply that your
+Modified Version is the official Stikly release or is endorsed by
+Wilkcraft.
+
+e. You distribute every Modified Version under this same License.
+
+Optional donations and payments for separate support or services are
+permitted, provided they are not required to obtain or use the Software
+or Modified Version.
+
+4. No Trademark License
+
+This License does not grant permission to use the name “Stikly”, the
+Wilkcraft name, or any associated trademarks to suggest that a Modified
+Version is official or endorsed.
+
+5. Disclaimer
+
+THE SOFTWARE IS PROVIDED “AS IS”, WITHOUT WARRANTY OF ANY KIND, EXPRESS
+OR IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+FITNESS FOR A PARTICULAR PURPOSE, AND NONINFRINGEMENT. IN NO EVENT SHALL
+THE AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES, OR
+OTHER LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT, OR OTHERWISE,
+ARISING FROM, OUT OF, OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR
+OTHER DEALINGS IN THE SOFTWARE.
