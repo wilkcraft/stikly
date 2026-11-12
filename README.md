@@ -6,10 +6,10 @@
 
 **Sticky notes that actually stay stuck to your desk.**
 
-Free and open source sticky notes app for Windows 10 & 11.
+Free and source available sticky notes app for Windows 10 & 11.
 
-[![Open Source](https://img.shields.io/badge/Open%20Source-%E2%9D%A4-brightgreen)](https://github.com/wilkcraft/stikly)
-[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
+[![Source Available](https://img.shields.io/badge/Source_Available-%E2%9D%A4-brightgreen)](https://github.com/wilkcraft/stikly)
+[![License: Stikly Free Distribution 1.0](https://img.shields.io/badge/License-Stikly%20Free%20Distribution%201.0-yellow.svg)](LICENSE)
 [![Platform](https://img.shields.io/badge/platform-Windows%2010%20%7C%2011-blue)](https://stikly.wilkcraft.work/)
 [![Electron](https://img.shields.io/badge/built%20with-Electron-47848f)](https://www.electronjs.org/)
 
@@ -35,8 +35,8 @@ or from the [Releases](https://github.com/wilkcraft/stikly/releases) page.
 
 | Version   | Description                            |
 | --------- | -------------------------------------- |
-| Installer | `Stikly Setup 1.4.0.exe`               |
-| Portable  | `Stikly 1.4.0.exe` – no install needed |
+| Installer | `Stikly Setup 1.4.5.exe`               |
+| Portable  | `Stikly 1.4.5.exe` – no install needed |
 
 ## 🚀 Features
 
@@ -106,7 +106,9 @@ npm run build
 
 ## 🤝 Contributing
 
-Stikly is **open source** and contributions are welcome!
+Stikly's **source code** is available and contributions are welcome!
+By contributing, you agree that your changes are distributed under the
+[Stikly Free Distribution License 1.0](LICENSE).
 
 1. Fork the project
 2. Create your branch: `git checkout -b feature/my-feature`
@@ -118,7 +120,22 @@ Found a bug or have an idea? [Open an issue](https://github.com/wilkcraft/stikly
 
 ## 📄 License
 
-Distributed under the **MIT License**. See [`LICENSE`](LICENSE) for more information.
+Stikly is distributed under the **Stikly Free Distribution License 1.0**.
+See [`LICENSE`](LICENSE) for the full text.
+
+In short (the `LICENSE` file is the only legally binding text):
+
+- ✅ You can use, copy, modify and share Stikly for free.
+- ✅ You can accept optional donations and charge for separate support or services,
+  as long as they are not required to get or use the software.
+- ❌ You cannot charge a fee, or require a payment, subscription or purchase,
+  to access, download or use Stikly or a modified version.
+- 📝 You must keep the license and copyright notice, clearly mark your changes,
+  and distribute modified versions under this same license.
+- 🚫 You cannot present a modified version as the official Stikly or as endorsed
+  by Wilkcraft, and the "Stikly" and "Wilkcraft" names are not licensed.
+
+Third-party components (such as Electron) keep their own licenses.
 
 ## 👤 Author
 
