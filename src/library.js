@@ -440,6 +440,9 @@ document.getElementById("importBtn").addEventListener("click", async () => {
 });
 searchInput.addEventListener("input", render);
 window.addEventListener("focus", refresh);
+window.addEventListener("focus", () =>
+  window.libraryAPI.getUpdate().then(setUpdate),
+);
 
 const themeButtons = document.querySelectorAll("[data-pref]");
 function markTheme(pref) {
@@ -545,9 +548,10 @@ updateBtn.addEventListener("click", showUpdate);
 document
   .getElementById("updateClose")
   .addEventListener("click", () => (updateModal.hidden = true));
-document
-  .getElementById("updateDownload")
-  .addEventListener("click", () => window.libraryAPI.openDownload());
+document.getElementById("updateDownload").addEventListener("click", () => {
+  updateModal.hidden = true;
+  showDownloads();
+});
 updateModal.addEventListener("click", (e) => {
   if (e.target === updateModal) updateModal.hidden = true;
 });
@@ -555,6 +559,7 @@ document.addEventListener("keydown", (e) => {
   if (e.key === "Escape") {
     updateModal.hidden = true;
     settingsModal.hidden = true;
+    downloadModal.hidden = true;
   }
 });
 
@@ -697,6 +702,125 @@ setShortcut.addEventListener("keydown", (e) => {
     e.key.length === 1 ? e.key.toUpperCase() : e.key.replace("Arrow", "");
   if (key === " ") key = "Space";
   pushSettings({ shortcut: [...mods, key].join("+") });
+});
+
+const downloadModal = document.getElementById("downloadModal");
+const dlTitle = document.getElementById("dlTitle");
+const dlRows = {};
+let dlBusy = null;
+let dlVersion = null;
+
+document.querySelectorAll(".dl-row").forEach((row) => {
+  const kind = row.dataset.kind;
+  dlRows[kind] = {
+    row,
+    btn: row.querySelector(".dl-btn"),
+    box: row.querySelector(".dl-progress"),
+    bar: row.querySelector("progress"),
+    pct: row.querySelector(".dl-pct"),
+    name: row.querySelector(".dl-name"),
+    msg: row.querySelector(".dl-msg"),
+  };
+});
+
+function fmtSize(bytes) {
+  if (!bytes) return "";
+  const mb = bytes / 1048576;
+  return mb >= 1 ? mb.toFixed(1) + " MB" : Math.ceil(bytes / 1024) + " KB";
+}
+
+function setRowState(kind, state, msg = "") {
+  const r = dlRows[kind];
+  r.row.dataset.state = state;
+  r.box.hidden = state === "idle" || state === "error";
+  r.msg.textContent = msg;
+  r.btn.textContent = {
+    idle: "Download",
+    downloading: "Cancel",
+    done: kind === "setup" ? "Install" : "Show in folder",
+    error: "Retry",
+  }[state];
+  r.btn.classList.toggle("secondary", state === "downloading");
+  r.btn.classList.toggle("primary", state !== "downloading");
+  for (const k in dlRows) {
+    dlRows[k].btn.disabled = !!dlBusy && dlBusy !== k;
+  }
+}
+
+function showDownloads() {
+  if (!currentUpdate) return;
+  const v = currentUpdate.version;
+  dlTitle.textContent = `Download Stikly ${v}`;
+  if (dlVersion !== v && !dlBusy) {
+    dlVersion = v;
+    for (const kind in dlRows) {
+      const a = currentUpdate.assets?.[kind];
+      dlRows[kind].name.textContent = a
+        ? `${a.name}${a.size ? " · " + fmtSize(a.size) : ""}`
+        : "";
+      setRowState(kind, "idle");
+    }
+  }
+  downloadModal.hidden = false;
+}
+
+Object.entries(dlRows).forEach(([kind, r]) => {
+  r.btn.addEventListener("click", () => {
+    const state = r.row.dataset.state || "idle";
+    if (state === "downloading") return window.libraryAPI.cancelDownload();
+    if (state === "done") {
+      return kind === "setup"
+        ? window.libraryAPI.installUpdate(kind)
+        : window.libraryAPI.revealDownload(kind);
+    }
+    dlBusy = kind;
+    r.bar.value = 0;
+    r.pct.textContent = "0%";
+    setRowState(kind, "downloading");
+    window.libraryAPI.downloadAsset(kind);
+  });
+});
+
+window.libraryAPI.onUpdateProgress((p) => {
+  const r = dlRows[p.kind] || dlRows[dlBusy];
+  if (!r) return;
+  const kind = p.kind || dlBusy;
+
+  if (p.error) {
+    dlBusy = null;
+    if (p.error === "cancelled") setRowState(kind, "idle");
+    else setRowState(kind, "error", "Download failed: " + p.error);
+    return;
+  }
+
+  if (p.total) {
+    const pct = Math.floor((p.received / p.total) * 100);
+    r.bar.value = pct;
+    r.pct.textContent = `${fmtSize(p.received)} / ${fmtSize(p.total)} · ${pct}%`;
+  } else {
+    r.bar.removeAttribute("value");
+    r.pct.textContent = fmtSize(p.received);
+  }
+
+  if (p.done) {
+    dlBusy = null;
+    r.bar.value = 100;
+    r.pct.textContent = "100%";
+    setRowState(
+      kind,
+      "done",
+      kind === "setup"
+        ? "Download complete. Click Install to continue."
+        : "Download complete. Saved in your Downloads folder.",
+    );
+  }
+});
+
+document
+  .getElementById("dlClose")
+  .addEventListener("click", () => (downloadModal.hidden = true));
+downloadModal.addEventListener("click", (e) => {
+  if (e.target === downloadModal) downloadModal.hidden = true;
 });
 
 refresh();

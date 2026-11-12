@@ -780,6 +780,75 @@ mark.hit {
   border-radius: 6px;
 }
 
+.dl-row {
+  border: 1px solid rgba(0, 0, 0, 0.15);
+  border-radius: 8px;
+  padding: 12px 14px;
+  margin: 10px 0;
+}
+.dl-top {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+.dl-info {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+}
+.dl-name {
+  font-size: 0.78rem;
+  opacity: 0.7;
+  overflow-wrap: anywhere;
+}
+.dl-btn {
+  flex: 0 0 auto;
+  font-size: 0.95rem;
+  padding: 8px 16px;
+}
+.dl-btn.primary {
+  background: var(--yellow);
+}
+.dl-btn.secondary {
+  background: rgba(0, 0, 0, 0.12);
+}
+.dl-btn:disabled {
+  opacity: 0.4;
+  cursor: default;
+  transform: none;
+}
+.dl-progress {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  margin-top: 10px;
+}
+.dl-progress[hidden] {
+  display: none;
+}
+.dl-progress progress {
+  width: 100%;
+  height: 10px;
+  accent-color: #2e7d32;
+}
+.dl-pct {
+  font-size: 0.75rem;
+  opacity: 0.8;
+}
+.dl-msg {
+  font-size: 0.8rem;
+  margin-top: 6px;
+  opacity: 0.85;
+}
+.dl-msg:empty {
+  display: none;
+}
+.dl-row[data-state="error"] .dl-msg {
+  color: #c62828;
+  opacity: 1;
+}
+
 @media (prefers-color-scheme: dark) {
   .modal-card {
     background: #2d3a35;
@@ -807,5 +876,15 @@ mark.hit {
   }
   .md a {
     color: #90caf9;
+  }
+  .dl-row {
+    border-color: var(--field-border);
+  }
+  .dl-btn.secondary {
+    background: rgba(255, 255, 255, 0.18);
+    color: var(--text);
+  }
+  .dl-row[data-state="error"] .dl-msg {
+    color: #ef9a9a;
   }
 }

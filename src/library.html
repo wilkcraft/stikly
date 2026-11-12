@@ -126,7 +126,58 @@
             Later
           </button>
           <button type="button" id="updateDownload" class="paper-btn primary">
-            Go to download page
+            Download…
+          </button>
+        </div>
+      </div>
+    </div>
+
+    <div id="downloadModal" class="modal" hidden>
+      <div
+        class="modal-card"
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby="dlTitle"
+      >
+        <h2 id="dlTitle"></h2>
+
+        <div class="dl-row" data-kind="setup">
+          <div class="dl-top">
+            <div class="dl-info">
+              <strong>Installer</strong>
+              <span class="dl-name"></span>
+            </div>
+            <button type="button" class="paper-btn primary dl-btn">
+              Download
+            </button>
+          </div>
+          <div class="dl-progress" hidden>
+            <progress max="100" value="0"></progress>
+            <span class="dl-pct"></span>
+          </div>
+          <div class="dl-msg"></div>
+        </div>
+
+        <div class="dl-row" data-kind="portable">
+          <div class="dl-top">
+            <div class="dl-info">
+              <strong>Portable</strong>
+              <span class="dl-name"></span>
+            </div>
+            <button type="button" class="paper-btn primary dl-btn">
+              Download
+            </button>
+          </div>
+          <div class="dl-progress" hidden>
+            <progress max="100" value="0"></progress>
+            <span class="dl-pct"></span>
+          </div>
+          <div class="dl-msg"></div>
+        </div>
+
+        <div class="modal-actions">
+          <button type="button" id="dlClose" class="paper-btn secondary">
+            Close
           </button>
         </div>
       </div>

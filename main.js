@@ -698,7 +698,24 @@ function pushUpdateToLibrary() {
   }
 }
 
-async function checkForUpdates() {
+let checkPromise = null;
+
+function loadCachedUpdate() {
+  const c = loadSettings().cachedUpdate;
+  if (c && c.version && isNewer(c.version, app.getVersion())) updateInfo = c;
+  else updateInfo = null;
+}
+
+function checkForUpdates() {
+  if (!checkPromise) {
+    checkPromise = doCheckForUpdates().finally(() => {
+      checkPromise = null;
+    });
+  }
+  return checkPromise;
+}
+
+async function doCheckForUpdates() {
   try {
     const res = await net.fetch(
       `https://api.github.com/repos/${REPO}/releases/latest`,
@@ -715,6 +732,7 @@ async function checkForUpdates() {
 
     if (!isNewer(rel.tag_name, app.getVersion())) {
       updateInfo = null;
+      saveSettings({ cachedUpdate: null });
       pushUpdateToLibrary();
       return;
     }
@@ -725,7 +743,9 @@ async function checkForUpdates() {
       name: rel.name || `Stikly ${version}`,
       body: rel.body || "",
       published: rel.published_at || null,
+      assets: buildAssets(rel, version),
     };
+    saveSettings({ cachedUpdate: updateInfo });
     pushUpdateToLibrary();
 
     if (
@@ -747,9 +767,16 @@ async function checkForUpdates() {
 
 function startUpdateChecks() {
   clearInterval(updateTimer);
+  loadCachedUpdate();
+  pushUpdateToLibrary();
   checkForUpdates();
   updateTimer = setInterval(checkForUpdates, 12 * 60 * 60 * 1000);
 }
+
+ipcMain.handle("update:get", async () => {
+  if (checkPromise) await checkPromise;
+  return updateInfo;
+});
 
 function stopUpdateChecks() {
   clearInterval(updateTimer);
@@ -796,6 +823,7 @@ app.whenReady().then(() => {
 
   registerShortcut();
   openStartupNotes();
+  initUpdates(libraryWindow);
 
   screen.on("display-removed", scheduleRescue);
   screen.on("display-metrics-changed", scheduleRescue);
@@ -1230,6 +1258,7 @@ function createLibraryWindow() {
   libraryWindow.setMenu(null);
   libraryWindow.loadFile(path.join(__dirname, "src", "library.html"));
   libraryWindow.once("ready-to-show", () => libraryWindow.show());
+  libraryWindow.webContents.on("did-finish-load", pushUpdateToLibrary);
   libraryWindow.on("closed", () => {
     libraryWindow = null;
   });
@@ -1345,7 +1374,121 @@ ipcMain.handle("library:set-meta", (event, filePath, patch) => {
   return true;
 });
 
-ipcMain.handle("update:get", () => updateInfo);
+function buildAssets(rel, version) {
+  const base = `https://github.com/${REPO}/releases/download/${rel.tag_name}/`;
+  const names = {
+    portable: `Stikly.${version}.exe`,
+    setup: `Stikly.Setup.${version}.exe`,
+  };
+  const out = {};
+  for (const [kind, name] of Object.entries(names)) {
+    const a = (rel.assets || []).find((x) => x.name === name);
+    out[kind] = {
+      name,
+      url: a?.browser_download_url || base + name,
+      size: a?.size || 0,
+    };
+  }
+  return out;
+}
+
+let updateDl = null;
+const downloaded = {};
+
+function sendToLibrary(channel, payload) {
+  if (libraryWindow && !libraryWindow.isDestroyed()) {
+    libraryWindow.webContents.send(channel, payload);
+  }
+}
+
+async function downloadUpdateAsset(kind) {
+  if (updateDl) return false;
+  const asset = updateInfo?.assets?.[kind];
+  if (!asset) {
+    sendToLibrary("update-progress", { kind, error: "File not available" });
+    return false;
+  }
+
+  const finalPath = path.join(app.getPath("downloads"), asset.name);
+  const tmp = finalPath + ".part";
+  const controller = new AbortController();
+  updateDl = { kind, controller };
+  delete downloaded[kind];
+
+  const progress = (p) => sendToLibrary("update-progress", { kind, ...p });
+
+  try {
+    const res = await net.fetch(asset.url, {
+      signal: controller.signal,
+      headers: { "User-Agent": "Stikly" },
+    });
+    if (!res.ok || !res.body) throw new Error("HTTP " + res.status);
+
+    const total = Number(res.headers.get("content-length")) || asset.size || 0;
+    let received = 0;
+    let lastSent = 0;
+
+    const out = fs.createWriteStream(tmp);
+    let streamError = null;
+    out.on("error", (e) => (streamError = e));
+
+    const reader = res.body.getReader();
+    try {
+      while (true) {
+        const { done, value } = await reader.read();
+        if (done) break;
+        if (streamError) throw streamError;
+        if (!out.write(value)) await new Promise((r) => out.once("drain", r));
+        received += value.length;
+        const now = Date.now();
+        if (now - lastSent > 80) {
+          lastSent = now;
+          progress({ received, total });
+        }
+      }
+    } finally {
+      await new Promise((r) => out.end(r));
+    }
+    if (streamError) throw streamError;
+
+    fs.rmSync(finalPath, { force: true });
+    fs.renameSync(tmp, finalPath);
+    downloaded[kind] = finalPath;
+    progress({ received, total, done: true });
+    return true;
+  } catch (e) {
+    fs.rmSync(tmp, { force: true });
+    progress({ error: controller.signal.aborted ? "cancelled" : e.message });
+    return false;
+  } finally {
+    updateDl = null;
+  }
+}
+
+ipcMain.handle("update:download-asset", (e, kind) => {
+  if (kind !== "portable" && kind !== "setup") return false;
+  downloadUpdateAsset(kind);
+  return true;
+});
+
+ipcMain.handle("update:cancel", () => {
+  if (updateDl) updateDl.controller.abort();
+});
+
+ipcMain.handle("update:reveal", (e, kind) => {
+  const p = downloaded[kind];
+  if (p && fs.existsSync(p)) shell.showItemInFolder(p);
+});
+
+ipcMain.handle("update:install", async (e, kind) => {
+  const p = downloaded[kind];
+  if (kind !== "setup" || !p || !fs.existsSync(p)) return false;
+  const err = await shell.openPath(p);
+  if (err) return false;
+  setTimeout(closeEverything, 800);
+  return true;
+});
+
 ipcMain.handle("update:download", () => shell.openExternal(DOWNLOAD_URL));
 ipcMain.handle("update:open-link", (e, url) => {
   if (typeof url === "string" && /^https:\/\//i.test(url))

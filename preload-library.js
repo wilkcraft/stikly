@@ -20,4 +20,9 @@ contextBridge.exposeInMainWorld("libraryAPI", {
     ipcRenderer.invoke("library:set-meta", filePath, patch),
   getSettings: () => ipcRenderer.invoke("settings:get"),
   setSettings: (patch) => ipcRenderer.invoke("settings:set", patch),
+  downloadAsset: (kind) => ipcRenderer.invoke("update:download-asset", kind),
+  cancelDownload: () => ipcRenderer.invoke("update:cancel"),
+  installUpdate: (kind) => ipcRenderer.invoke("update:install", kind),
+  revealDownload: (kind) => ipcRenderer.invoke("update:reveal", kind),
+  onUpdateProgress: (cb) => ipcRenderer.on("update-progress", (e, d) => cb(d)),
 });
