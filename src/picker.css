@@ -5,6 +5,8 @@ body {
   overflow: hidden;
   font-family: "Segoe UI", sans-serif;
   background: transparent;
+  width: 100%;
+  height: 100%;
 }
 body {
   -webkit-app-region: drag;
@@ -73,5 +75,38 @@ body.dark-bg .picker-preview {
   border-color: rgba(255, 255, 255, 0.3);
 }
 body.dark-bg .picker-close {
+  color: #fff;
+}
+#svCanvas,
+#hueCanvas,
+#pickerHex,
+.picker-close,
+.picker-bottom-row,
+.picker-size-row {
+  -webkit-app-region: no-drag;
+}
+
+.picker-size-row {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin-top: 8px;
+  font-size: 12px;
+}
+.picker-size-row[hidden] {
+  display: none;
+}
+.picker-size-row input[type="range"] {
+  flex: 1;
+  min-width: 0;
+}
+.picker-size-row input[type="number"] {
+  width: 46px;
+  font-size: 12px;
+  padding: 2px 3px;
+  border: 1px solid rgba(0, 0, 0, 0.15);
+  border-radius: 4px;
+}
+body.dark-bg .picker-size-row {
   color: #fff;
 }

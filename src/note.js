@@ -1,3 +1,100 @@
+const TAG_MAP = {
+  B: "b",
+  STRONG: "strong",
+  I: "i",
+  EM: "em",
+  U: "u",
+  S: "s",
+  STRIKE: "s",
+  DEL: "s",
+  UL: "ul",
+  OL: "ol",
+  LI: "li",
+  BR: "br",
+  DIV: "div",
+  P: "p",
+  SPAN: "span",
+  FONT: "span",
+  MARK: "mark",
+  SUB: "sub",
+  SUP: "sup",
+};
+const DROP_TAGS = new Set([
+  "SCRIPT",
+  "STYLE",
+  "IFRAME",
+  "OBJECT",
+  "EMBED",
+  "NOSCRIPT",
+  "TEMPLATE",
+]);
+
+function validColor(value) {
+  return !!value && value.length < 60 && CSS.supports("color", value);
+}
+
+function sanitizeInto(source, target) {
+  for (const child of source.childNodes) {
+    if (child.nodeType === Node.TEXT_NODE) {
+      target.appendChild(document.createTextNode(child.textContent));
+      continue;
+    }
+    if (child.nodeType !== Node.ELEMENT_NODE) continue;
+
+    const name = child.tagName.toUpperCase();
+    if (DROP_TAGS.has(name)) continue;
+
+    const tag = TAG_MAP[name];
+    if (!tag) {
+      sanitizeInto(child, target);
+      continue;
+    }
+
+    const out = document.createElement(tag);
+    const st = child.style;
+
+    const color = child.getAttribute("color") || st.color;
+    if (validColor(color)) out.style.color = color;
+
+    if (
+      validColor(st.backgroundColor) &&
+      st.backgroundColor !== "transparent"
+    ) {
+      out.style.backgroundColor = st.backgroundColor;
+    }
+
+    if (/^(bold|[6-9]00)$/i.test(st.fontWeight)) out.style.fontWeight = "700";
+    if (/^italic$/i.test(st.fontStyle)) out.style.fontStyle = "italic";
+
+    const size = parseFloat(st.fontSize);
+    if (/px$/i.test(st.fontSize) && size >= 8 && size <= 72) {
+      out.style.fontSize = size + "px";
+    }
+
+    const deco = st.textDecorationLine || st.textDecoration;
+    if (/^(underline|line-through)( (underline|line-through))?$/i.test(deco)) {
+      out.style.textDecoration = deco;
+    }
+
+    if (tag === "ul" && child.classList.contains("checklist")) {
+      out.classList.add("checklist");
+    }
+    if (tag === "li" && child.dataset.checked === "true") {
+      out.dataset.checked = "true";
+    }
+
+    sanitizeInto(child, out);
+    target.appendChild(out);
+  }
+}
+
+function setSafeHtml(target, html) {
+  const doc = new DOMParser().parseFromString(String(html), "text/html");
+  const frag = document.createDocumentFragment();
+  sanitizeInto(doc.body, frag);
+  target.replaceChildren(frag);
+}
+
 const noteEl = document.getElementById("note");
 const content = document.getElementById("content");
 const closeBtn = document.getElementById("closeBtn");
@@ -16,6 +113,7 @@ const resetColorBtn = document.getElementById("resetColorBtn");
 const resetHighlightBtn = document.getElementById("resetHighlightBtn");
 let notePath = null;
 const DEFAULT_NOTE_COLOR = "#fff59d";
+let baseTextColor = "#000000";
 let noteId = null;
 let saveTimeout = null;
 
@@ -37,18 +135,34 @@ function getLuminance(hex) {
   return (r * 299 + g * 587 + b * 114) / 1000;
 }
 
-function applyNoteColor(color) {
-  noteEl.style.background = color;
-  const isDark = getLuminance(color) < 140;
+let noteColor = DEFAULT_NOTE_COLOR;
+let noteOpacity = 1;
+
+function renderNoteBackground() {
+  const { r, g, b } = hexToRgb(noteColor);
+  noteEl.style.background = `rgba(${r}, ${g}, ${b}, ${noteOpacity})`;
+
+  const isDark = getLuminance(noteColor) < 140;
+  const base = isDark ? "255, 255, 255" : "0, 0, 0";
+  const bandA = (isDark ? 0.14 : 0.08) * noteOpacity;
+  const borderA = (isDark ? 0.2 : 0.12) * noteOpacity;
+
   noteEl.style.setProperty("--collapse-ink", isDark ? "#fff" : "#000");
-  if (isDark) {
-    noteEl.style.setProperty("--band-overlay", "rgba(255, 255, 255, 0.14)");
-    noteEl.style.setProperty("--band-border", "rgba(255, 255, 255, 0.2)");
-  } else {
-    noteEl.style.setProperty("--band-overlay", "rgba(0, 0, 0, 0.08)");
-    noteEl.style.setProperty("--band-border", "rgba(0, 0, 0, 0.12)");
-  }
+  noteEl.style.setProperty("--band-overlay", `rgba(${base}, ${bandA})`);
+  noteEl.style.setProperty("--band-border", `rgba(${base}, ${borderA})`);
 }
+
+function applyNoteColor(color) {
+  noteColor = color;
+  renderNoteBackground();
+}
+
+function applyNoteOpacity(o) {
+  noteOpacity = o;
+  renderNoteBackground();
+}
+
+window.notesAPI.onApplyOpacity(({ opacity }) => applyNoteOpacity(opacity));
 
 function rgbStringToHex(rgbStr) {
   const match = rgbStr.match(/\d+/g);
@@ -72,11 +186,18 @@ window.notesAPI.onInit(
     filePath,
     topCollapsed,
     bottomCollapsed,
+    opacity,
+    fontSize,
+    textColor,
   }) => {
     noteId = id;
+    baseTextColor = textColor || "#000000";
+    content.style.fontSize = (fontSize || 14) + "px";
+    content.style.color = baseTextColor;
+    noteOpacity = typeof opacity === "number" ? opacity : 1;
     notePath = filePath || null;
     if (html) {
-      content.innerHTML = html;
+      setSafeHtml(content, html);
     } else if (text) {
       content.textContent = text;
     } else {
@@ -157,6 +278,58 @@ function applyToSavedSelection(command, value) {
     savedRange = sel.getRangeAt(0).cloneRange();
   }
   showKeptSelection();
+  scheduleSave();
+}
+
+function applyFontSize(px) {
+  content.focus();
+  const sel = window.getSelection();
+  if (savedRange) {
+    sel.removeAllRanges();
+    sel.addRange(savedRange.cloneRange());
+  }
+  if (sel.isCollapsed) return;
+
+  document.execCommand("fontSize", false, "7");
+  const spans = [];
+  content.querySelectorAll('font[size="7"]').forEach((f) => {
+    const span = document.createElement("span");
+    span.style.fontSize = px + "px";
+    while (f.firstChild) span.appendChild(f.firstChild);
+    f.replaceWith(span);
+    spans.push(span);
+  });
+  spans.forEach((s) =>
+    s
+      .querySelectorAll("span")
+      .forEach((i) => i.style.removeProperty("font-size")),
+  );
+
+  if (spans.length) {
+    const r = document.createRange();
+    r.setStartBefore(spans[0]);
+    r.setEndAfter(spans[spans.length - 1]);
+    sel.removeAllRanges();
+    sel.addRange(r);
+    savedRange = r.cloneRange();
+  }
+  showKeptSelection();
+  scheduleSave();
+}
+
+function resetFontSize() {
+  if (!savedRange) selectAllContent();
+  content.focus();
+  const sel = window.getSelection();
+  sel.removeAllRanges();
+  sel.addRange(savedRange.cloneRange());
+  content.querySelectorAll("span").forEach((s) => {
+    if (s.style.fontSize && sel.containsNode(s, true)) {
+      s.style.removeProperty("font-size");
+      if (!s.getAttribute("style")) s.removeAttribute("style");
+      if (!s.attributes.length) s.replaceWith(...s.childNodes);
+    }
+  });
   scheduleSave();
 }
 
@@ -300,12 +473,22 @@ colorBtn.addEventListener("click", () => {
     const val = document.queryCommandValue("foreColor");
     if (val) currentColor = rgbStringToHex(val);
   } catch (e) {}
+
+  let currentSize = 14;
+  const s = window.getSelection();
+  if (s.anchorNode && content.contains(s.anchorNode)) {
+    const n =
+      s.anchorNode.nodeType === 1 ? s.anchorNode : s.anchorNode.parentElement;
+    currentSize = Math.round(parseFloat(getComputedStyle(n).fontSize)) || 14;
+  }
+
   hideColorMenus();
   window.notesAPI.openColorPicker({
     noteId,
     origin: "text",
     currentColor,
-    noteColor: noteEl.style.background,
+    currentSize,
+    noteColor: noteColor,
   });
 });
 
@@ -330,10 +513,18 @@ function showMenuAboveButton(menuEl, btn) {
 
 resetColorBtn.addEventListener("click", () => {
   if (!savedRange) selectAllContent();
-  applyToSavedSelection("foreColor", "#000000");
+  applyToSavedSelection("foreColor", baseTextColor);
   colorBtn.style.borderBottom = "";
   colorMenu.classList.remove("visible");
 });
+
+const resetSizeBtn = document.getElementById("resetSizeBtn");
+resetSizeBtn.addEventListener("click", () => {
+  resetFontSize();
+  colorMenu.classList.remove("visible");
+});
+
+window.notesAPI.onApplyPickedSize(({ size }) => applyFontSize(size));
 
 let lastHighlightColor = "#ffeb3b";
 

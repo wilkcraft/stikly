@@ -51,6 +51,27 @@ function saveSettings(patch) {
   return next;
 }
 
+const NOTE_DEFAULTS = { color: "#fff59d", fontSize: 14, textColor: "#000000" };
+const PRESET_COLORS = ["#fff59d", "#c8e6c9", "#f8bbd0", "#bbdefb"];
+const HEX6 = /^#[0-9a-f]{6}$/i;
+
+function getNoteDefaults() {
+  const s = loadSettings();
+  const size = Number(s.defaultFontSize);
+  return {
+    color: PRESET_COLORS.includes(s.defaultColor)
+      ? s.defaultColor
+      : NOTE_DEFAULTS.color,
+    fontSize:
+      Number.isFinite(size) && size >= 8 && size <= 72
+        ? Math.round(size)
+        : NOTE_DEFAULTS.fontSize,
+    textColor: HEX6.test(s.defaultTextColor || "")
+      ? s.defaultTextColor
+      : NOTE_DEFAULTS.textColor,
+  };
+}
+
 const normPath = (p) => path.resolve(p).toLowerCase();
 
 function isInsideNotesFolder(filePath) {
@@ -178,6 +199,10 @@ function listSavedNotes() {
       tags: Array.isArray(data.tags)
         ? data.tags.filter((t) => typeof t === "string").slice(0, 10)
         : [],
+      opacity:
+        typeof data.opacity === "number"
+          ? Math.max(0.1, Math.min(1, data.opacity))
+          : 1,
     });
   }
   list.sort((a, b) => b.modified - a.modified);
@@ -273,6 +298,9 @@ function saveNoteToFile(win) {
     pinned: !!d.pinned,
     autoStart: !!d.autoStart,
     tags: Array.isArray(d.tags) ? d.tags : [],
+    opacity: typeof d.opacity === "number" ? d.opacity : 1,
+    fontSize: d.fontSize,
+    textColor: d.textColor,
   };
   writeFileAtomic(d.filePath, JSON.stringify(data, null, 2));
 }
@@ -487,17 +515,31 @@ function createNoteWindow(note, filePath) {
     tags: Array.isArray(note.tags) ? note.tags : [],
     autoNamed: false,
     discarded: false,
+    opacity:
+      typeof note.opacity === "number"
+        ? Math.max(0.1, Math.min(1, note.opacity))
+        : 1,
+    fontSize: Number.isFinite(note.fontSize)
+      ? note.fontSize
+      : NOTE_DEFAULTS.fontSize,
+    textColor: HEX6.test(note.textColor || "")
+      ? note.textColor
+      : NOTE_DEFAULTS.textColor,
   };
 
   win.on("hide", () => {
-    if (win.noteData?.zOrder === "desktop" && !win.isDestroyed()) {
+    if (win.isDestroyed()) return;
+    if (win.noteData?.zOrder === "desktop") {
       win.show();
       win.blur();
+      return;
     }
+    hideFloatersFor(note.id);
   });
 
   win.noteId = note.id;
   win.on("focus", () => closeMenuFor(note.id));
+  win.on("blur", () => hideFloatersIfNoteUnfocused(note.id));
   const followPickers = () => repositionPickersFor(note.id);
   win.on("move", followPickers);
   win.on("resize", followPickers);
@@ -527,13 +569,19 @@ function createNoteWindow(note, filePath) {
       topCollapsed: win.noteData.topCollapsed,
       bottomCollapsed: win.noteData.bottomCollapsed,
       filePath: win.noteData.filePath,
+      opacity: win.noteData.opacity,
+      fontSize: win.noteData.fontSize,
+      textColor: win.noteData.textColor,
     });
   });
   win.on("minimize", () => {
-    if (win.noteData.zOrder === "desktop" && !win.isDestroyed()) {
+    if (win.isDestroyed()) return;
+    if (win.noteData.zOrder === "desktop") {
       win.restore();
       win.blur();
+      return;
     }
+    hideFloatersFor(note.id);
   });
   win.on("close", () => {
     clearTimeout(autosaveTimers.get(win));
@@ -576,6 +624,7 @@ function focusWindowReliably(win) {
 function createNewNote() {
   const id = Date.now().toString();
   const offset = (noteWindows.size % 8) * 25;
+  const def = getNoteDefaults();
   const note = {
     id,
     x: 80 + offset,
@@ -584,7 +633,9 @@ function createNewNote() {
     height: 260,
     html: "",
     text: "",
-    color: "#fff59d",
+    color: def.color,
+    fontSize: def.fontSize,
+    textColor: def.textColor,
     zOrder: "normal",
   };
   const win = createNoteWindow(note);
@@ -890,7 +941,7 @@ ipcMain.on("update-note", (event, data) => {
   scheduleAutoSave(win);
 });
 
-function openColorPicker(noteId, origin, currentColor, noteColor) {
+function openColorPicker(noteId, origin, currentColor, noteColor, currentSize) {
   const noteWin = noteWindows.get(noteId);
   if (!noteWin || noteWin.isDestroyed()) return;
 
@@ -918,13 +969,24 @@ function openColorPicker(noteId, origin, currentColor, noteColor) {
 
   win.pickerData.moved = false;
   positionPickerWindow(win, noteWin, origin);
-  win.webContents.send("init-picker", { origin, currentColor, noteColor });
+  win.webContents.send("init-picker", {
+    origin,
+    currentColor,
+    noteColor,
+    currentSize,
+  });
   win.show();
   win.focus();
 }
 
 ipcMain.on("open-color-picker", (event, args) => {
-  openColorPicker(args.noteId, args.origin, args.currentColor, args.noteColor);
+  openColorPicker(
+    args.noteId,
+    args.origin,
+    args.currentColor,
+    args.noteColor,
+    args.currentSize,
+  );
 });
 
 ipcMain.on("close-color-picker", (event) => {
@@ -939,6 +1001,16 @@ ipcMain.on("picker-color-changed", (event, { color }) => {
   const noteWin = noteWindows.get(noteId);
   if (!noteWin || noteWin.isDestroyed()) return;
   noteWin.webContents.send("apply-picked-color", { color, origin });
+});
+
+ipcMain.on("picker-size-changed", (event, { size }) => {
+  const win = BrowserWindow.fromWebContents(event.sender);
+  if (!win || win.isDestroyed() || !win.pickerData) return;
+  const n = Number(size);
+  if (!Number.isFinite(n) || n < 8 || n > 72) return;
+  const noteWin = noteWindows.get(win.pickerData.noteId);
+  if (!noteWin || noteWin.isDestroyed()) return;
+  noteWin.webContents.send("apply-picked-size", { size: Math.round(n) });
 });
 
 ipcMain.handle("save-note-as", async (event) => {
@@ -978,11 +1050,17 @@ ipcMain.handle("open-note-file", () => {
 });
 
 const pickerWindows = new Map();
+const PICKER_W = 190;
+const pickerHeight = (origin) => (origin === "text" ? 205 : 165);
 
 function createPickerWindow(key, noteId, origin) {
+  const width = PICKER_W;
+  const height = pickerHeight(origin);
+
   const win = new BrowserWindow({
-    width: 190,
-    height: 165,
+    width,
+    height,
+    useContentSize: false,
     frame: false,
     transparent: true,
     resizable: false,
@@ -995,7 +1073,11 @@ function createPickerWindow(key, noteId, origin) {
       nodeIntegration: false,
     },
   });
+  win.setMinimumSize(width, height);
+  win.setMaximumSize(width, height);
+  win.pickerSize = { width, height };
   win.pickerData = { noteId, origin, moved: false };
+  win.on("blur", () => hideFloatersIfNoteUnfocused(noteId));
   win.pickerExpectedPos = null;
   win.on("move", () => {
     if (win.isDestroyed() || !win.pickerExpectedPos) return;
@@ -1014,7 +1096,7 @@ function createPickerWindow(key, noteId, origin) {
 
 function computePickerBounds(noteWin, pickerWin, origin) {
   const nb = noteWin.getBounds();
-  const { width: pw, height: ph } = pickerWin.getBounds();
+  const { width: pw, height: ph } = pickerWin.pickerSize;
   const wa = screen.getDisplayMatching(nb).workArea;
   const gap = 8;
 
@@ -1044,6 +1126,14 @@ function positionPickerWindow(win, noteWin, origin) {
   if (win.isDestroyed() || noteWin.isDestroyed()) return;
   const b = computePickerBounds(noteWin, win, origin);
   win.pickerExpectedPos = { x: b.x, y: b.y };
+  const cur = win.getBounds();
+  if (
+    cur.x === b.x &&
+    cur.y === b.y &&
+    cur.width === b.width &&
+    cur.height === b.height
+  )
+    return;
   win.setBounds(b);
 }
 
@@ -1062,6 +1152,15 @@ function repositionPickersFor(noteId) {
   }
 }
 
+function hideFloatersFor(noteId) {
+  for (const p of pickerWindows.values()) {
+    if (!p.isDestroyed() && p.isVisible() && p.pickerData?.noteId === noteId) {
+      p.hide();
+    }
+  }
+  closeMenuFor(noteId);
+}
+
 function broadcastNoteColorToPickers(noteId, noteColor) {
   for (const win of pickerWindows.values()) {
     if (win.pickerData?.noteId === noteId && !win.isDestroyed()) {
@@ -1071,7 +1170,7 @@ function broadcastNoteColorToPickers(noteId, noteColor) {
 }
 
 const MENU_W = 190;
-const MENU_H = 212;
+const MENU_H = 258;
 const MENU_PAD = 8;
 const menuWindows = new Map();
 
@@ -1102,6 +1201,21 @@ function createMenuWindow(noteId) {
 
   menuWindows.set(noteId, win);
   return win;
+}
+
+function belongsToNote(win, noteId) {
+  if (!win) return false;
+  if (noteWindows.get(noteId) === win) return true;
+  if (win.pickerData?.noteId === noteId) return true;
+  if (win.menuData?.noteId === noteId) return true;
+  return false;
+}
+
+function hideFloatersIfNoteUnfocused(noteId) {
+  setTimeout(() => {
+    if (belongsToNote(BrowserWindow.getFocusedWindow(), noteId)) return;
+    hideFloatersFor(noteId);
+  }, 80);
 }
 
 function hasVisibleNotePicker(noteId) {
@@ -1178,6 +1292,7 @@ function toggleMenu(noteId) {
     win.webContents.send("init-menu", {
       noteId,
       zOrder: noteWin.noteData.zOrder || "normal",
+      opacity: noteWin.noteData.opacity ?? 1,
     });
   if (win.webContents.isLoading()) {
     win.webContents.once("did-finish-load", sendInit);
@@ -1214,6 +1329,17 @@ ipcMain.on("menu-set-zorder", (event, { noteId, zOrder }) => {
   noteWin.noteData.zOrder = zOrder;
   closeMenuFor(noteId);
   applyZOrder(noteWin, zOrder);
+  scheduleAutoSave(noteWin);
+});
+
+ipcMain.on("menu-set-opacity", (event, { noteId, opacity }) => {
+  const noteWin = noteWindows.get(noteId);
+  if (!noteWin || noteWin.isDestroyed()) return;
+  const pct = Number(opacity);
+  if (!Number.isFinite(pct)) return;
+  const o = Math.max(0.1, Math.min(1, Math.round(pct) / 100));
+  noteWin.noteData.opacity = o;
+  noteWin.webContents.send("apply-opacity", { opacity: o });
   scheduleAutoSave(noteWin);
 });
 
@@ -1498,6 +1624,7 @@ ipcMain.handle(
   "update:get-enabled",
   () => loadSettings().updateChecks === true,
 );
+ipcMain.handle("app:get-version", () => app.getVersion());
 ipcMain.handle("update:set-enabled", (e, on) => {
   saveSettings({ updateChecks: !!on });
   if (on) startUpdateChecks();
@@ -1536,6 +1663,7 @@ function getSettingsView() {
     shortcutEnabled: s.shortcutEnabled !== false,
     shortcut: s.shortcut || DEFAULT_SHORTCUT,
     shortcutOk,
+    noteDefaults: getNoteDefaults(),
   };
 }
 
@@ -1552,6 +1680,21 @@ ipcMain.handle("settings:set", (e, patch = {}) => {
     /^[\w+]{1,40}$/.test(patch.shortcut)
   )
     next.shortcut = patch.shortcut;
+
+  const d = patch.noteDefaults;
+  if (d && typeof d === "object") {
+    if (d.reset === true) {
+      next.defaultColor = NOTE_DEFAULTS.color;
+      next.defaultFontSize = NOTE_DEFAULTS.fontSize;
+      next.defaultTextColor = NOTE_DEFAULTS.textColor;
+    }
+    if (PRESET_COLORS.includes(d.color)) next.defaultColor = d.color;
+    const n = Math.round(Number(d.fontSize));
+    if (Number.isFinite(n) && n >= 8 && n <= 72) next.defaultFontSize = n;
+    if (HEX6.test(d.textColor || ""))
+      next.defaultTextColor = d.textColor.toLowerCase();
+  }
+
   if (Object.keys(next).length) saveSettings(next);
 
   if (typeof patch.openAtLogin === "boolean" && app.isPackaged) {

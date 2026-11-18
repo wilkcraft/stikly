@@ -5,4 +5,5 @@ contextBridge.exposeInMainWorld("pickerAPI", {
   close: () => ipcRenderer.send("close-color-picker"),
   onNoteColorChanged: (cb) =>
     ipcRenderer.on("note-color-changed", (e, data) => cb(data)),
+  sendSize: (size) => ipcRenderer.send("picker-size-changed", { size }),
 });

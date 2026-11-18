@@ -1,6 +1,6 @@
 {
   "name": "stikly",
-  "version": "1.4.5",
+  "version": "1.4.8",
   "description": "Sticky notes for the Windows 10/11 desktop",
   "main": "main.js",
   "author": "Wilkcraft",
@@ -41,7 +41,8 @@
     },
     "nsis": {
       "oneClick": false,
-      "perMachine": true,
+      "perMachine": false,
+      "allowElevation": false,
       "allowToChangeInstallationDirectory": true,
       "createDesktopShortcut": true,
       "createStartMenuShortcut": true,

@@ -58,6 +58,11 @@ function isDarkColor(color) {
   return (r * 299 + g * 587 + b * 114) / 1000 < 140;
 }
 
+function withAlpha(color, alpha) {
+  const [r, g, b] = parseRgb(color);
+  return `rgba(${r}, ${g}, ${b}, ${alpha})`;
+}
+
 function hueOf(color) {
   const [r, g, b] = parseRgb(color).map((v) => v / 255);
   const max = Math.max(r, g, b),
@@ -161,6 +166,8 @@ function sanitizeInto(source, target) {
     if (/^(bold|[6-9]00)$/i.test(weight)) out.style.fontWeight = "700";
     if (/^italic$/i.test(readStyle(child, "font-style")))
       out.style.fontStyle = "italic";
+    const size = readStyle(child, "font-size");
+    if (/^\d+(\.\d+)?px$/i.test(size)) out.style.fontSize = size;
     const deco = readStyle(child, "text-decoration");
     if (/^(underline|line-through)( (underline|line-through))?$/i.test(deco)) {
       out.style.textDecoration = deco;
@@ -237,7 +244,10 @@ function createCard(note, q) {
   card.tabIndex = 0;
   card.setAttribute("role", "button");
   card.setAttribute("aria-label", "Open note " + note.name);
-  card.style.setProperty("--note-color", note.color);
+  card.style.setProperty(
+    "--note-color",
+    withAlpha(note.color, note.opacity ?? 1),
+  );
 
   card.appendChild(el("div", "pin"));
   if (note.isOpen) card.appendChild(el("span", "open-badge", "Open"));
@@ -259,6 +269,8 @@ function createCard(note, q) {
     const row = el("div", "card-tags");
     for (const t of note.tags) {
       const chip = el("span", "tag-chip", "#" + t);
+      chip.addEventListener("click", (e) => e.stopPropagation());
+      chip.addEventListener("keydown", (e) => e.stopPropagation());
       const x = el("button", "tag-x", "\u00D7");
       x.type = "button";
       x.title = "Remove tag";
@@ -650,6 +662,12 @@ const setShortcutOn = document.getElementById("setShortcutOn");
 const setShortcut = document.getElementById("setShortcut");
 const shortcutMsg = document.getElementById("shortcutMsg");
 const startupRadios = document.querySelectorAll('input[name="startupMode"]');
+const defDots = document.querySelectorAll("#defColors .def-dot");
+const defSize = document.getElementById("defSize");
+const defTextColor = document.getElementById("defTextColor");
+const defReset = document.getElementById("defReset");
+
+defDots.forEach((b) => (b.style.background = b.dataset.color));
 
 function applySettingsUI(s) {
   setLogin.checked = s.openAtLogin;
@@ -661,6 +679,12 @@ function applySettingsUI(s) {
     s.shortcutEnabled && !s.shortcutOk
       ? "That shortcut is used by another app. Try a different one."
       : "";
+  const d = s.noteDefaults;
+  defDots.forEach((b) =>
+    b.setAttribute("aria-pressed", String(b.dataset.color === d.color)),
+  );
+  defSize.value = d.fontSize;
+  defTextColor.value = d.textColor;
 }
 async function pushSettings(patch) {
   applySettingsUI(await window.libraryAPI.setSettings(patch));
@@ -822,5 +846,32 @@ document
 downloadModal.addEventListener("click", (e) => {
   if (e.target === downloadModal) downloadModal.hidden = true;
 });
+
+const appVersion = document.getElementById("appVersion");
+window.libraryAPI
+  .getVersion()
+  .then((v) => (appVersion.textContent = "Version " + v));
+
+document.querySelectorAll("a[data-external]").forEach((a) => {
+  a.addEventListener("click", (e) => {
+    e.preventDefault();
+    window.libraryAPI.openLink(a.href);
+  });
+});
+
+defDots.forEach((b) =>
+  b.addEventListener("click", () =>
+    pushSettings({ noteDefaults: { color: b.dataset.color } }),
+  ),
+);
+defSize.addEventListener("change", () =>
+  pushSettings({ noteDefaults: { fontSize: defSize.value } }),
+);
+defTextColor.addEventListener("change", () =>
+  pushSettings({ noteDefaults: { textColor: defTextColor.value } }),
+);
+defReset.addEventListener("click", () =>
+  pushSettings({ noteDefaults: { reset: true } }),
+);
 
 refresh();

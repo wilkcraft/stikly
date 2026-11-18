@@ -18,4 +18,8 @@ contextBridge.exposeInMainWorld("notesAPI", {
 
   toggleMenu: (id) => ipcRenderer.send("menu-toggle", id),
   closeMenu: (id) => ipcRenderer.send("menu-close", id),
+  onApplyPickedSize: (cb) =>
+    ipcRenderer.on("apply-picked-size", (e, data) => cb(data)),
+  onApplyOpacity: (cb) =>
+    ipcRenderer.on("apply-opacity", (e, data) => cb(data)),
 });

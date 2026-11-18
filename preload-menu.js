@@ -9,4 +9,6 @@ contextBridge.exposeInMainWorld("menuAPI", {
   openCustomColor: (noteId) =>
     ipcRenderer.send("menu-open-custom-color", { noteId }),
   close: (noteId) => ipcRenderer.send("menu-close", noteId),
+  setOpacity: (noteId, opacity) =>
+    ipcRenderer.send("menu-set-opacity", { noteId, opacity }),
 });

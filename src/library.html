@@ -112,6 +112,34 @@
       </label>
     </main>
 
+    <footer class="app-footer">
+      <span class="footer-version" id="appVersion">Version</span>
+
+      <p class="footer-credit">
+        App and
+        <a
+          href="https://stikly.wilkcraft.work/"
+          class="wilkcraft-link"
+          data-external
+          >Web</a
+        >
+        developed by
+        <a
+          href="https://www.wilkcraft.work/"
+          class="wilkcraft-link"
+          data-external
+          >Wilkcraft</a
+        >
+      </p>
+
+      <a
+        href="https://stikly.wilkcraft.work/#feedback"
+        class="footer-link footer-feedback"
+        data-external
+        >Issues and Ideas</a
+      >
+    </footer>
+
     <div id="updateModal" class="modal" hidden>
       <div
         class="modal-card"
@@ -190,7 +218,16 @@
         aria-modal="true"
         aria-labelledby="settingsTitle"
       >
-        <h2 id="settingsTitle">Settings</h2>
+        <div class="modal-head">
+          <h2 id="settingsTitle">Settings</h2>
+          <button
+            type="button"
+            id="settingsClose"
+            class="paper-btn primary modal-close"
+          >
+            Close
+          </button>
+        </div>
 
         <label class="set-row">
           <input type="checkbox" id="setLogin" /> Start Stikly with Windows
@@ -224,11 +261,59 @@
         />
         <p id="shortcutMsg" class="hint"></p>
 
-        <div class="modal-actions">
-          <button type="button" id="settingsClose" class="paper-btn primary">
-            Close
+        <fieldset class="set-group">
+          <legend>Default for new notes</legend>
+
+          <div class="def-row">
+            <span>Color</span>
+            <div
+              class="def-colors"
+              id="defColors"
+              role="group"
+              aria-label="Default note color"
+            >
+              <button
+                type="button"
+                class="def-dot"
+                data-color="#fff59d"
+                title="Yellow"
+              ></button>
+              <button
+                type="button"
+                class="def-dot"
+                data-color="#c8e6c9"
+                title="Green"
+              ></button>
+              <button
+                type="button"
+                class="def-dot"
+                data-color="#f8bbd0"
+                title="Pink"
+              ></button>
+              <button
+                type="button"
+                class="def-dot"
+                data-color="#bbdefb"
+                title="Blue"
+              ></button>
+            </div>
+          </div>
+
+          <div class="def-row">
+            <span>Font size</span>
+            <input type="number" id="defSize" min="8" max="72" />
+            <span>px</span>
+          </div>
+
+          <div class="def-row">
+            <span>Text color</span>
+            <input type="color" id="defTextColor" />
+          </div>
+
+          <button type="button" id="defReset" class="paper-btn secondary">
+            Restore defaults
           </button>
-        </div>
+        </fieldset>
       </div>
     </div>
 

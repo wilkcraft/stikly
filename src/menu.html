@@ -22,7 +22,7 @@
       .menu-card {
         box-sizing: border-box;
         width: 190px;
-        height: 212px;
+        height: 258px;
         padding: 7px;
         background: rgba(255, 255, 255, 0.96);
         border: 1px solid rgba(0, 0, 0, 0.12);
@@ -114,6 +114,23 @@
       .menu-item.selected {
         font-weight: 600;
       }
+      .opacity-row {
+        display: flex;
+        align-items: center;
+        gap: 6px;
+        padding: 2px 4px 4px;
+      }
+      .opacity-row input[type="range"] {
+        flex: 1;
+        min-width: 0;
+      }
+      .opacity-row input[type="number"] {
+        width: 44px;
+        font-size: 11px;
+        padding: 2px 3px;
+        border: 1px solid rgba(0, 0, 0, 0.2);
+        border-radius: 4px;
+      }
     </style>
   </head>
   <body>
@@ -160,6 +177,14 @@
         </div>
       </div>
 
+      <div class="menu-section">
+        <div class="menu-title">Opacity</div>
+        <div class="opacity-row">
+          <input type="range" id="opRange" min="10" max="100" value="100" />
+          <input type="number" id="opNum" min="10" max="100" value="100" />
+        </div>
+      </div>
+
       <div class="menu-separator"></div>
 
       <div class="menu-section">
@@ -179,13 +204,28 @@
     <script>
       let noteId = null;
       const zButtons = document.querySelectorAll("[data-zorder]");
+      const opRange = document.getElementById("opRange");
+      const opNum = document.getElementById("opNum");
 
-      window.menuAPI.onInit(({ noteId: id, zOrder }) => {
+      window.menuAPI.onInit(({ noteId: id, zOrder, opacity }) => {
         noteId = id;
         zButtons.forEach((b) =>
           b.classList.toggle("selected", b.dataset.zorder === zOrder),
         );
+        const pct = Math.round((opacity ?? 1) * 100);
+        opRange.value = pct;
+        opNum.value = pct;
       });
+
+      function sendOpacity(raw) {
+        const v = Math.max(10, Math.min(100, Math.round(Number(raw))));
+        if (!v) return;
+        opRange.value = v;
+        opNum.value = v;
+        window.menuAPI.setOpacity(noteId, v);
+      }
+      opRange.addEventListener("input", () => sendOpacity(opRange.value));
+      opNum.addEventListener("change", () => sendOpacity(opNum.value));
 
       document.querySelectorAll(".color-option[data-color]").forEach((b) => {
         b.addEventListener("click", () =>

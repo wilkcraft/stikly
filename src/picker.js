@@ -79,11 +79,7 @@ function rgbToHex(r, g, b) {
   return (
     "#" +
     [r, g, b]
-      .map((x) =>
-        Math.max(0, Math.min(255, x))
-          .toString(16)
-          .padStart(2, "0"),
-      )
+      .map((x) => Math.max(0, Math.min(255, x)).toString(16).padStart(2, "0"))
       .join("")
   );
 }
@@ -217,8 +213,11 @@ function parseColorToHex(str) {
   return null;
 }
 
-window.pickerAPI.onInit(({ origin, currentColor, noteColor }) => {
+window.pickerAPI.onInit(({ origin, currentColor, noteColor, currentSize }) => {
   currentOrigin = origin || "text";
+
+  sizeRow.hidden = currentOrigin !== "text";
+  if (currentOrigin === "text") setSizeUI(currentSize || 14);
 
   const parsedCurrent = parseColorToHex(currentColor);
   if (parsedCurrent) {
@@ -255,3 +254,20 @@ pickerHex.addEventListener("change", () => {
 document
   .getElementById("closeBtn")
   .addEventListener("click", () => window.pickerAPI.close());
+
+const sizeRow = document.getElementById("sizeRow");
+const sizeRange = document.getElementById("sizeRange");
+const sizeNum = document.getElementById("sizeNum");
+
+function setSizeUI(v) {
+  sizeRange.value = v;
+  sizeNum.value = v;
+}
+function sendSize(raw) {
+  const v = Math.max(8, Math.min(72, Math.round(Number(raw))));
+  if (!v) return;
+  setSizeUI(v);
+  window.pickerAPI.sendSize(v);
+}
+sizeRange.addEventListener("input", () => sendSize(sizeRange.value));
+sizeNum.addEventListener("change", () => sendSize(sizeNum.value));

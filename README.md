@@ -35,8 +35,8 @@ or from the [Releases](https://github.com/wilkcraft/stikly/releases) page.
 
 | Version   | Description                            |
 | --------- | -------------------------------------- |
-| Installer | `Stikly Setup 1.4.5.exe`               |
-| Portable  | `Stikly 1.4.5.exe` – no install needed |
+| Installer | `Stikly Setup 1.4.8.exe`               |
+| Portable  | `Stikly 1.4.8.exe` – no install needed |
 
 ## 🚀 Features
 

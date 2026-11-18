@@ -2,6 +2,11 @@
 <html lang="en">
   <head>
     <meta charset="UTF-8" />
+    <meta
+      http-equiv="Content-Security-Policy"
+      content="default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'none'; object-src 'none'; base-uri 'none'; form-action 'none'"
+    />
+
     <title>Stikly Note</title>
     <link rel="stylesheet" href="note.css" />
   </head>
@@ -176,6 +181,10 @@
         <button id="resetColorBtn" class="menu-item">
           <span>⟲</span>
           Reset color
+        </button>
+        <button id="resetSizeBtn" class="menu-item">
+          <span>⟲</span>
+          Reset size
         </button>
       </div>
       <div id="highlightMenu" class="menu color-menu">
